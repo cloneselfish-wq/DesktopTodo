@@ -123,6 +123,15 @@ namespace DesktopTodo
             });
             return list;
         }
+
+        // Permanently removes a single item by id (e.g. one added by mistake).
+        public static bool DeleteItem(string id)
+        {
+            TodoItem it = Data.Items.Find(delegate(TodoItem i) { return i.Id == id; });
+            if (it == null) return false;
+            Data.Items.Remove(it);
+            return true;
+        }
     }
 
     public static class Logger

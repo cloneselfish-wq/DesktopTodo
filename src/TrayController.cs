@@ -96,8 +96,24 @@ namespace DesktopTodo
             }
         }
 
-        // Draws a rounded square with a white check mark (used for tray + taskbar icon)
+        // Tray + taskbar icon: prefer the app icon embedded in the exe (from logo.png),
+        // fall back to a drawn rounded square with a white check mark.
         public static SD.Icon MakeIcon()
+        {
+            try
+            {
+                string exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (!string.IsNullOrEmpty(exe))
+                {
+                    SD.Icon appIco = SD.Icon.ExtractAssociatedIcon(exe);
+                    if (appIco != null) return appIco;
+                }
+            }
+            catch (Exception ex) { Logger.Log("MakeIcon(extract) failed: " + ex.Message); }
+            return MakeIconFallback();
+        }
+
+        private static SD.Icon MakeIconFallback()
         {
             using (SD.Bitmap bmp = new SD.Bitmap(32, 32))
             {

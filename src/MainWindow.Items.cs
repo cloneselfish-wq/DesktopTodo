@@ -143,6 +143,51 @@ namespace DesktopTodo
             RefreshAll();
         }
 
+        // Small ghost ✕ button on a card; asks for confirmation, then permanently removes the item.
+        private Border BuildDeleteButton(TodoItem item)
+        {
+            Border db = new Border();
+            db.Width = 24;
+            db.Height = 24;
+            db.CornerRadius = new CornerRadius(12);
+            db.Background = Brushes.Transparent;
+            db.Cursor = Cursors.Hand;
+            db.VerticalAlignment = VerticalAlignment.Center;
+            db.ToolTip = "删除这条待办";
+
+            TextBlock dTxt = new TextBlock();
+            dTxt.Text = "\uE711";
+            dTxt.FontFamily = new FontFamily("Segoe MDL2 Assets");
+            dTxt.FontSize = 11;
+            dTxt.Foreground = BrushFrom(0xB3, 0xB9, 0xC4);
+            dTxt.HorizontalAlignment = HorizontalAlignment.Center;
+            dTxt.VerticalAlignment = VerticalAlignment.Center;
+            db.Child = dTxt;
+
+            db.MouseEnter += delegate
+            {
+                db.Background = BrushFrom(0xFB, 0xEC, 0xEC);
+                dTxt.Foreground = BrushFrom(0xE5, 0x48, 0x4D);
+            };
+            db.MouseLeave += delegate
+            {
+                db.Background = Brushes.Transparent;
+                dTxt.Foreground = BrushFrom(0xB3, 0xB9, 0xC4);
+            };
+            db.MouseLeftButtonUp += delegate
+            {
+                MessageBoxResult r = MessageBox.Show(this,
+                    "确定删除这条待办吗？\n「" + item.Text + "」\n删除后无法恢复。",
+                    "删除待办", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (r != MessageBoxResult.Yes) return;
+                Store.DeleteItem(item.Id);
+                Store.Save();
+                RefreshAll();
+            };
+
+            return db;
+        }
+
         private UIElement BuildActiveCard(TodoItem item)
         {
             Border card = new Border();
@@ -157,8 +202,10 @@ namespace DesktopTodo
             Grid g = new Grid();
             ColumnDefinition c0 = new ColumnDefinition(); c0.Width = GridLength.Auto;
             ColumnDefinition c1 = new ColumnDefinition(); c1.Width = new GridLength(1, GridUnitType.Star);
+            ColumnDefinition c2 = new ColumnDefinition(); c2.Width = GridLength.Auto;
             g.ColumnDefinitions.Add(c0);
             g.ColumnDefinitions.Add(c1);
+            g.ColumnDefinitions.Add(c2);
             card.Child = g;
 
             // Round checkbox
@@ -244,6 +291,11 @@ namespace DesktopTodo
                 AnimateComplete(item, card, cb, check, txt, strike, st);
             };
 
+            Border del = BuildDeleteButton(item);
+            del.Margin = new Thickness(2, 0, 0, 0);
+            g.Children.Add(del);
+            Grid.SetColumn(del, 2);
+
             return card;
         }
 
@@ -307,8 +359,10 @@ namespace DesktopTodo
             Grid g = new Grid();
             ColumnDefinition c0 = new ColumnDefinition(); c0.Width = new GridLength(1, GridUnitType.Star);
             ColumnDefinition c1 = new ColumnDefinition(); c1.Width = GridLength.Auto;
+            ColumnDefinition c2 = new ColumnDefinition(); c2.Width = GridLength.Auto;
             g.ColumnDefinitions.Add(c0);
             g.ColumnDefinitions.Add(c1);
+            g.ColumnDefinitions.Add(c2);
             card.Child = g;
 
             StackPanel sp = new StackPanel();
@@ -356,6 +410,11 @@ namespace DesktopTodo
 
             g.Children.Add(rb);
             Grid.SetColumn(rb, 1);
+
+            Border del = BuildDeleteButton(item);
+            del.Margin = new Thickness(2, 0, 0, 0);
+            g.Children.Add(del);
+            Grid.SetColumn(del, 2);
 
             return card;
         }

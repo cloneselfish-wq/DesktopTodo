@@ -38,7 +38,12 @@ if (-not $sources -or @($sources).Count -eq 0) { throw 'No source files found un
 
 $outExe = Join-Path $root 'DesktopTodo.exe'
 
-& $csc /nologo /target:winexe /platform:anycpu /optimize+ /codepage:65001 /out:"$outExe" @refArgs @sources
+# Embed the app icon (assets\app.ico) as the Win32 icon when present
+$ico = Join-Path $root 'assets\app.ico'
+$icoArgs = @()
+if (Test-Path $ico) { $icoArgs = @('/win32icon:"' + $ico + '"') }
+
+& $csc /nologo /target:winexe /platform:anycpu /optimize+ /codepage:65001 /out:"$outExe" @refArgs @icoArgs @sources
 
 if ($LASTEXITCODE -ne 0) { throw ("csc.exe failed with exit code " + $LASTEXITCODE) }
 Write-Host ("Build OK -> " + $outExe)
