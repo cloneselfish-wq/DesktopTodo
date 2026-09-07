@@ -156,6 +156,7 @@ namespace DesktopTodo
             pinGlyph = (TextBlock)pinBtn.Child;
             btns.Children.Add(pinBtn);
 
+            btns.Children.Add(MakeTitleIcon("\uE713", "设置", delegate { ShowSettings(); }));
             btns.Children.Add(MakeTitleIcon("\uE921", "最小化", delegate { MinimizeOrHide(); }));
             btns.Children.Add(MakeTitleIcon("\uE710", "隐藏到托盘", delegate { HideToTray(); }));
 
