@@ -33,6 +33,9 @@ namespace DesktopTodo
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 
@@ -41,6 +44,7 @@ namespace DesktopTodo
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_FRAMECHANGED = 0x0020;
+        private const uint SWP_SHOWWINDOW = 0x0040;
         private const int GWL_STYLE = -16;
         private const int WS_CHILD = 0x40000000;
         private const int WS_POPUP = unchecked((int)0x80000000);
@@ -68,17 +72,21 @@ namespace DesktopTodo
             IntPtr result;
             SendMessageTimeout(progman, 0x052C, IntPtr.Zero, IntPtr.Zero, 0, 1000, out result);
 
+            // Pick the first VISIBLE WorkerW without the icons view = the live wallpaper layer.
+            // Windows can keep stale HIDDEN WorkerW layers around (e.g. wallpaper slideshow
+            // leftovers); parenting into a hidden layer makes the widget invisible, so skip those.
             IntPtr worker = IntPtr.Zero;
+            IntPtr fallback = IntPtr.Zero;
             IntPtr w2 = IntPtr.Zero;
             while (true)
             {
                 w2 = FindWindowEx(IntPtr.Zero, w2, "WorkerW", null);
                 if (w2 == IntPtr.Zero) break;
-                if (FindWindowEx(w2, IntPtr.Zero, "SHELLDLL_DefView", null) == IntPtr.Zero)
-                {
-                    worker = w2; // WorkerW without the icons view = wallpaper layer
-                }
+                if (FindWindowEx(w2, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero) continue;
+                fallback = w2;
+                if (worker == IntPtr.Zero && IsWindowVisible(w2)) worker = w2;
             }
+            if (worker == IntPtr.Zero) worker = fallback;
             return worker;
         }
 
@@ -90,6 +98,11 @@ namespace DesktopTodo
                 IntPtr worker = GetDesktopWorkerW();
                 if (worker == IntPtr.Zero) return false;
 
+                RECT wr, cr;
+                bool haveWorkerRect = GetWindowRect(worker, out wr);
+                bool haveWinRect = GetWindowRect(hwnd, out cr);
+                Logger.Log("Embed: worker=" + worker.ToInt64() + " visible=" + IsWindowVisible(worker));
+
                 int style = GetWindowLong(hwnd, GWL_STYLE);
                 SetWindowLong(hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_CHILD);
                 if (!SetParent(hwnd, worker))
@@ -97,8 +110,21 @@ namespace DesktopTodo
                     SetWindowLong(hwnd, GWL_STYLE, style);
                     return false;
                 }
-                SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+                if (haveWorkerRect && haveWinRect)
+                {
+                    // Coordinates become relative to the host layer after SetParent;
+                    // keep the same on-screen spot and force the window visible.
+                    SetWindowPos(hwnd, IntPtr.Zero,
+                        cr.Left - wr.Left, cr.Top - wr.Top,
+                        cr.Right - cr.Left, cr.Bottom - cr.Top,
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                }
+                else
+                {
+                    SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                }
                 return true;
             }
             catch (Exception ex)
