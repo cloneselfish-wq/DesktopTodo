@@ -477,13 +477,11 @@ namespace DesktopTodo
         {
             try
             {
-                bool ok = DesktopHost.Embed(this);
-                if (ok)
-                {
-                    Settings s = Store.Data.Settings;
-                    if (s.HasPos) DesktopHost.SetEmbedPosition(this, s.PosX, s.PosY);
-                }
-                else
+                // Embed() preserves the window's current on-screen position by mapping it
+                // into the host layer's own coordinates. Do NOT re-apply the saved PosX/PosY
+                // afterwards: those are in DIPs while SetEmbedPosition works in raw pixels,
+                // which misplaces the widget on displays with DPI scaling != 100%.
+                if (!DesktopHost.Embed(this))
                 {
                     embedded = false;
                     ShowInTaskbar = true;

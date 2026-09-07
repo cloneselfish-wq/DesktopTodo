@@ -72,21 +72,31 @@ namespace DesktopTodo
             IntPtr result;
             SendMessageTimeout(progman, 0x052C, IntPtr.Zero, IntPtr.Zero, 0, 1000, out result);
 
-            // Pick the first VISIBLE WorkerW without the icons view = the live wallpaper layer.
-            // Windows can keep stale HIDDEN WorkerW layers around (e.g. wallpaper slideshow
-            // leftovers); parenting into a hidden layer makes the widget invisible, so skip those.
+            // 1) Classic (Win10 / early Win11): a TOP-LEVEL WorkerW without the icons view
+            //    is the live wallpaper layer. Never fall back to hidden ones — Windows keeps
+            //    stale HIDDEN WorkerW layers around (measured: 16 on Win11 25H2) and
+            //    parenting into those makes the widget invisible.
             IntPtr worker = IntPtr.Zero;
-            IntPtr fallback = IntPtr.Zero;
             IntPtr w2 = IntPtr.Zero;
             while (true)
             {
                 w2 = FindWindowEx(IntPtr.Zero, w2, "WorkerW", null);
                 if (w2 == IntPtr.Zero) break;
                 if (FindWindowEx(w2, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero) continue;
-                fallback = w2;
                 if (worker == IntPtr.Zero && IsWindowVisible(w2)) worker = w2;
             }
-            if (worker == IntPtr.Zero) worker = fallback;
+            if (worker != IntPtr.Zero) return worker;
+
+            // 2) Windows 11 24H2+/25H2: 0x052C no longer spawns a top-level layer; the live
+            //    wallpaper WorkerW is a visible CHILD of Progman (sibling of the icons view).
+            IntPtr w3 = IntPtr.Zero;
+            while (true)
+            {
+                w3 = FindWindowEx(progman, w3, "WorkerW", null);
+                if (w3 == IntPtr.Zero) break;
+                if (FindWindowEx(w3, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero) continue;
+                if (worker == IntPtr.Zero && IsWindowVisible(w3)) worker = w3;
+            }
             return worker;
         }
 
@@ -108,8 +118,10 @@ namespace DesktopTodo
                 if (!SetParent(hwnd, worker))
                 {
                     SetWindowLong(hwnd, GWL_STYLE, style);
+                    Logger.Log("Embed: SetParent failed, err=" + Marshal.GetLastWin32Error());
                     return false;
                 }
+                Logger.Log("Embed: parented into " + worker.ToInt64());
 
                 if (haveWorkerRect && haveWinRect)
                 {
