@@ -19,8 +19,8 @@ namespace DesktopTodo
             Window w = new Window();
             settingsWindow = w;
             w.Title = "设置";
-            w.Width = 272;
-            w.Height = 182;
+            w.Width = 292;
+            w.Height = 202;
             w.WindowStyle = WindowStyle.None;
             w.ResizeMode = ResizeMode.NoResize;
             w.AllowsTransparency = true;
@@ -33,9 +33,11 @@ namespace DesktopTodo
 
             Border root = new Border();
             root.Background = Brushes.White;
-            root.CornerRadius = new CornerRadius(12);
-            root.BorderBrush = BrushFrom(0xE8, 0xEA, 0xF0);
+            root.CornerRadius = new CornerRadius(14);
+            root.BorderBrush = Theme.CardBorder;
             root.BorderThickness = new Thickness(1);
+            root.Margin = new Thickness(10);
+            root.Effect = Theme.CardShadow();
             w.Content = root;
 
             StackPanel sp = new StackPanel();
@@ -63,7 +65,7 @@ namespace DesktopTodo
             title.Text = "设置";
             title.FontSize = 13.5;
             title.FontWeight = FontWeights.SemiBold;
-            title.Foreground = BrushFrom(0x2B, 0x2F, 0x36);
+            title.Foreground = Theme.TextPrimary;
             title.VerticalAlignment = VerticalAlignment.Center;
             hg.Children.Add(title);
             Grid.SetColumn(title, 0);
@@ -93,27 +95,7 @@ namespace DesktopTodo
 
         private Border MakeSettingsIconButton(string glyph, Action onClick)
         {
-            Border b = new Border();
-            b.Width = 30;
-            b.Height = 26;
-            b.CornerRadius = new CornerRadius(6);
-            b.Background = Brushes.Transparent;
-            b.Cursor = Cursors.Hand;
-            b.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { e.Handled = true; };
-
-            TextBlock t = new TextBlock();
-            t.Text = glyph;
-            t.FontFamily = new FontFamily("Segoe MDL2 Assets");
-            t.FontSize = 11;
-            t.Foreground = BrushFrom(0x8A, 0x93, 0xA6);
-            t.HorizontalAlignment = HorizontalAlignment.Center;
-            t.VerticalAlignment = VerticalAlignment.Center;
-            b.Child = t;
-
-            b.MouseEnter += delegate { b.Background = BrushFrom(0xF0, 0xF2, 0xF7); };
-            b.MouseLeave += delegate { b.Background = Brushes.Transparent; };
-            b.MouseLeftButtonUp += delegate { onClick(); };
-            return b;
+            return Theme.GhostButton(glyph, 11, null, false, onClick);
         }
 
         // One settings row: label on the left, pill switch on the right.

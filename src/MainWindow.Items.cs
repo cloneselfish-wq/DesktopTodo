@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -23,23 +24,21 @@ namespace DesktopTodo
         private Border BuildDoneSection()
         {
             doneSection = new Border();
-            doneSection.Margin = new Thickness(10, 6, 10, 10);
-            doneSection.Background = Brushes.White;
-            doneSection.CornerRadius = new CornerRadius(10);
-            doneSection.BorderBrush = BrushFrom(0xE8, 0xEA, 0xF0);
-            doneSection.BorderThickness = new Thickness(1);
-            doneSection.Padding = new Thickness(4);
+            doneSection.Margin = new Thickness(12, 6, 12, 12);
+            doneSection.Background = BrushFrom(0xEE, 0xF0, 0xF6);
+            doneSection.CornerRadius = new CornerRadius(12);
+            doneSection.Padding = new Thickness(5);
 
             StackPanel outer = new StackPanel();
             doneSection.Child = outer;
 
             doneHeader = new Border();
             doneHeader.Padding = new Thickness(8, 7, 10, 7);
-            doneHeader.CornerRadius = new CornerRadius(7);
+            doneHeader.CornerRadius = new CornerRadius(8);
             doneHeader.Cursor = Cursors.Hand;
             doneHeader.Background = Brushes.Transparent;
             doneHeader.ToolTip = "点击展开，查看并恢复已划掉的待办";
-            doneHeader.MouseEnter += delegate { doneHeader.Background = BrushFrom(0xF3, 0xF5, 0xFA); };
+            doneHeader.MouseEnter += delegate { doneHeader.Background = BrushFrom(0xE3, 0xE6, 0xEF); };
             doneHeader.MouseLeave += delegate { doneHeader.Background = Brushes.Transparent; };
             doneHeader.MouseLeftButtonUp += delegate { doneOpen = !doneOpen; RefreshAll(); };
             outer.Children.Add(doneHeader);
@@ -74,6 +73,8 @@ namespace DesktopTodo
             ScrollViewer scroller = new ScrollViewer();
             scroller.MaxHeight = 240;
             scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            Style sbStyle = Theme.SlimScrollBar();
+            if (sbStyle != null) scroller.Resources.Add(typeof(ScrollBar), sbStyle);
             doneList = new StackPanel();
             scroller.Content = doneList;
             doneBody.Child = scroller;
@@ -87,18 +88,46 @@ namespace DesktopTodo
             activeList.Children.Clear();
 
             List<TodoItem> active = Store.GetActiveSorted();
+
+            if (titleCount != null)
+            {
+                titleCount.Text = active.Count == 0 ? "" : "· " + active.Count + " 项";
+            }
+
             if (active.Count == 0)
             {
                 if (emptyState == null)
                 {
                     emptyState = new Border();
-                    emptyState.Padding = new Thickness(0, 30, 0, 12);
-                    TextBlock t = new TextBlock();
-                    t.Text = "暂无待办，在上方输入并添加一条吧";
-                    t.HorizontalAlignment = HorizontalAlignment.Center;
-                    t.FontSize = 12.5;
-                    t.Foreground = BrushFrom(0xB0, 0xB7, 0xC3);
-                    emptyState.Child = t;
+                    emptyState.Padding = new Thickness(0, 34, 0, 14);
+                    StackPanel esp = new StackPanel();
+                    esp.HorizontalAlignment = HorizontalAlignment.Center;
+                    Border ico = new Border();
+                    ico.Width = 46;
+                    ico.Height = 46;
+                    ico.CornerRadius = new CornerRadius(23);
+                    ico.Background = BrushFrom(0xE9, 0xEB, 0xF4);
+                    TextBlock ig = Theme.Glyph("\uE73A", 18, BrushFrom(0xB6, 0xBD, 0xCC));
+                    ig.HorizontalAlignment = HorizontalAlignment.Center;
+                    ig.VerticalAlignment = VerticalAlignment.Center;
+                    ico.Child = ig;
+                    TextBlock t1 = new TextBlock();
+                    t1.Text = "今天没有待办";
+                    t1.FontSize = 13;
+                    t1.FontWeight = FontWeights.SemiBold;
+                    t1.Foreground = BrushFrom(0x8A, 0x93, 0xA6);
+                    t1.HorizontalAlignment = HorizontalAlignment.Center;
+                    t1.Margin = new Thickness(0, 12, 0, 0);
+                    TextBlock t2 = new TextBlock();
+                    t2.Text = "在上方输入，回车添加一条吧";
+                    t2.FontSize = 11.5;
+                    t2.Foreground = BrushFrom(0xB0, 0xB7, 0xC3);
+                    t2.HorizontalAlignment = HorizontalAlignment.Center;
+                    t2.Margin = new Thickness(0, 4, 0, 0);
+                    esp.Children.Add(ico);
+                    esp.Children.Add(t1);
+                    esp.Children.Add(t2);
+                    emptyState.Child = esp;
                 }
                 activeList.Children.Add(emptyState);
             }
@@ -192,10 +221,10 @@ namespace DesktopTodo
         {
             Border card = new Border();
             card.Background = Brushes.White;
-            card.CornerRadius = new CornerRadius(9);
-            card.Margin = new Thickness(6, 0, 6, 8);
-            card.Padding = new Thickness(11, 10, 11, 9);
-            card.BorderBrush = BrushFrom(0xE8, 0xEA, 0xF0);
+            card.CornerRadius = new CornerRadius(12);
+            card.Margin = new Thickness(4, 0, 4, 9);
+            card.Padding = new Thickness(12, 11, 9, 10);
+            card.BorderBrush = Theme.CardBorder;
             card.BorderThickness = new Thickness(1);
             card.Tag = item;
 
@@ -208,31 +237,13 @@ namespace DesktopTodo
             g.ColumnDefinitions.Add(c2);
             card.Child = g;
 
-            // Round checkbox
-            Border cb = new Border();
-            cb.Width = 20;
-            cb.Height = 20;
-            cb.CornerRadius = new CornerRadius(10);
-            cb.BorderBrush = BrushFrom(0xB9, 0xC0, 0xCC);
-            cb.BorderThickness = new Thickness(1.6);
-            cb.Background = Brushes.Transparent;
+            // Rounded-square checkbox
+            Border cb = Theme.CheckCircle();
             cb.VerticalAlignment = VerticalAlignment.Top;
-            cb.Margin = new Thickness(0, 2, 10, 0);
-            cb.Cursor = Cursors.Hand;
-
-            TextBlock check = new TextBlock();
-            check.Text = "✓";
-            check.Foreground = Brushes.White;
-            check.FontSize = 12;
-            check.FontWeight = FontWeights.Bold;
-            check.HorizontalAlignment = HorizontalAlignment.Center;
-            check.VerticalAlignment = VerticalAlignment.Center;
-            check.Visibility = Visibility.Collapsed;
-            cb.Child = check;
-
-            cb.MouseEnter += delegate { if (!item.Completed) cb.BorderBrush = BrushFrom(0x4F, 0x6B, 0xED); };
-            cb.MouseLeave += delegate { if (!item.Completed) cb.BorderBrush = BrushFrom(0xB9, 0xC0, 0xCC); };
-
+            cb.Margin = new Thickness(0, 1, 10, 0);
+            TextBlock check = (TextBlock)cb.Child;
+            cb.MouseEnter += delegate { if (!item.Completed) cb.BorderBrush = Theme.Accent; };
+            cb.MouseLeave += delegate { if (!item.Completed) cb.BorderBrush = Theme.CheckBorder; };
             g.Children.Add(cb);
             Grid.SetColumn(cb, 0);
 
@@ -246,7 +257,7 @@ namespace DesktopTodo
             txt.Text = item.Text;
             txt.TextWrapping = TextWrapping.Wrap;
             txt.FontSize = 14;
-            txt.Foreground = BrushFrom(0x2B, 0x2F, 0x36);
+            txt.Foreground = Theme.TextPrimary;
             txt.HorizontalAlignment = HorizontalAlignment.Left;
             textGrid.Children.Add(txt);
 
@@ -254,7 +265,7 @@ namespace DesktopTodo
             strike.Height = 2;
             strike.RadiusX = 1;
             strike.RadiusY = 1;
-            strike.Fill = BrushFrom(0x8A, 0x93, 0xA6);
+            strike.Fill = BrushFrom(0xA6, 0xAD, 0xB9);
             strike.VerticalAlignment = VerticalAlignment.Center;
             ScaleTransform st = new ScaleTransform(0, 1);
             strike.RenderTransform = st;
@@ -262,25 +273,40 @@ namespace DesktopTodo
             textGrid.Children.Add(strike);
             content.Children.Add(textGrid);
 
-            // Badges: optional due date + creation time
+            // Badges: optional due-date pill + creation time
             StackPanel badges = new StackPanel();
             badges.Orientation = Orientation.Horizontal;
-            badges.Margin = new Thickness(0, 5, 0, 0);
+            badges.Margin = new Thickness(0, 6, 0, 0);
 
             if (item.DueDate.HasValue)
             {
+                Border duePill = new Border();
+                duePill.Background = DuePillBg(item.DueDate.Value);
+                duePill.CornerRadius = new CornerRadius(9);
+                duePill.Padding = new Thickness(7, 2, 7, 3);
+                duePill.VerticalAlignment = VerticalAlignment.Center;
+                StackPanel dp = new StackPanel();
+                dp.Orientation = Orientation.Horizontal;
+                TextBlock clock = Theme.Glyph("\uE823", 10, DueBrush(item.DueDate.Value));
+                clock.VerticalAlignment = VerticalAlignment.Center;
                 TextBlock due = new TextBlock();
-                due.Text = "⏰ " + DueText(item.DueDate.Value);
+                due.Text = DueText(item.DueDate.Value);
                 due.FontSize = 11;
                 due.Foreground = DueBrush(item.DueDate.Value);
-                badges.Children.Add(due);
+                due.VerticalAlignment = VerticalAlignment.Center;
+                due.Margin = new Thickness(4, 0, 0, 0);
+                dp.Children.Add(clock);
+                dp.Children.Add(due);
+                duePill.Child = dp;
+                badges.Children.Add(duePill);
             }
 
             TextBlock created = new TextBlock();
             created.Text = "创建 " + FmtTime(item.CreatedAt);
-            created.FontSize = 11;
-            created.Foreground = BrushFrom(0xA8, 0xAF, 0xBC);
-            if (item.DueDate.HasValue) created.Margin = new Thickness(10, 0, 0, 0);
+            created.FontSize = 10.5;
+            created.Foreground = Theme.TextTertiary;
+            created.VerticalAlignment = VerticalAlignment.Center;
+            if (item.DueDate.HasValue) created.Margin = new Thickness(8, 0, 0, 0);
             badges.Children.Add(created);
 
             content.Children.Add(badges);
@@ -293,8 +319,22 @@ namespace DesktopTodo
 
             Border del = BuildDeleteButton(item);
             del.Margin = new Thickness(2, 0, 0, 0);
+            del.Opacity = 0;
             g.Children.Add(del);
             Grid.SetColumn(del, 2);
+
+            card.MouseEnter += delegate
+            {
+                card.BorderBrush = Theme.CardBorderHover;
+                card.Effect = Theme.CardShadow();
+                del.Opacity = 1;
+            };
+            card.MouseLeave += delegate
+            {
+                card.BorderBrush = Theme.CardBorder;
+                card.Effect = null;
+                del.Opacity = 0;
+            };
 
             return card;
         }
@@ -309,8 +349,8 @@ namespace DesktopTodo
             Store.Save();
 
             card.IsHitTestVisible = false;
-            cb.Background = BrushFrom(0x9A, 0xA5, 0xB8);
-            cb.BorderBrush = BrushFrom(0x9A, 0xA5, 0xB8);
+            cb.Background = Theme.Accent;
+            cb.BorderBrush = Theme.Accent;
             check.Visibility = Visibility.Visible;
 
             DoubleAnimation checkIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160));
@@ -351,9 +391,9 @@ namespace DesktopTodo
         private UIElement BuildDoneCard(TodoItem item)
         {
             Border card = new Border();
-            card.Background = BrushFrom(0xF1, 0xF3, 0xF8);
-            card.CornerRadius = new CornerRadius(8);
-            card.Margin = new Thickness(4, 0, 4, 6);
+            card.Background = Brushes.White;
+            card.CornerRadius = new CornerRadius(10);
+            card.Margin = new Thickness(2, 0, 2, 6);
             card.Padding = new Thickness(10, 8, 8, 8);
 
             Grid g = new Grid();
@@ -372,8 +412,8 @@ namespace DesktopTodo
             TextBlock txt = new TextBlock();
             txt.Text = item.Text;
             txt.TextWrapping = TextWrapping.Wrap;
-            txt.FontSize = 13;
-            txt.Foreground = BrushFrom(0x9A, 0xA1, 0xAE);
+            txt.FontSize = 12.5;
+            txt.Foreground = BrushFrom(0x8A, 0x93, 0xA6);
             txt.TextDecorations = TextDecorations.Strikethrough;
             sp.Children.Add(txt);
 
@@ -381,7 +421,7 @@ namespace DesktopTodo
             string doneAt = item.CompletedAt.HasValue ? FmtTime(item.CompletedAt.Value) : "-";
             times.Text = "创建 " + FmtTime(item.CreatedAt) + "    划掉 " + doneAt;
             times.FontSize = 10.5;
-            times.Foreground = BrushFrom(0xB3, 0xB9, 0xC4);
+            times.Foreground = Theme.TextTertiary;
             times.Margin = new Thickness(0, 3, 0, 0);
             sp.Children.Add(times);
 
@@ -389,23 +429,19 @@ namespace DesktopTodo
             rb.Width = 26;
             rb.Height = 26;
             rb.CornerRadius = new CornerRadius(13);
-            rb.Background = BrushFrom(0xE3, 0xE7, 0xF0);
+            rb.Background = BrushFrom(0xEE, 0xF1, 0xF8);
             rb.Cursor = Cursors.Hand;
             rb.VerticalAlignment = VerticalAlignment.Center;
             rb.Margin = new Thickness(6, 0, 0, 0);
             rb.ToolTip = "恢复这条待办";
 
-            TextBlock rTxt = new TextBlock();
-            rTxt.Text = "\uE7A7";
-            rTxt.FontFamily = new FontFamily("Segoe MDL2 Assets");
-            rTxt.FontSize = 12;
-            rTxt.Foreground = BrushFrom(0x4F, 0x6B, 0xED);
+            TextBlock rTxt = Theme.Glyph("\uE7A7", 12, Theme.Accent);
             rTxt.HorizontalAlignment = HorizontalAlignment.Center;
             rTxt.VerticalAlignment = VerticalAlignment.Center;
             rb.Child = rTxt;
 
-            rb.MouseEnter += delegate { rb.Background = BrushFrom(0xD5, 0xDC, 0xEA); };
-            rb.MouseLeave += delegate { rb.Background = BrushFrom(0xE3, 0xE7, 0xF0); };
+            rb.MouseEnter += delegate { rb.Background = BrushFrom(0xE1, 0xE6, 0xF3); };
+            rb.MouseLeave += delegate { rb.Background = BrushFrom(0xEE, 0xF1, 0xF8); };
             rb.MouseLeftButtonUp += delegate { Restore(item); };
 
             g.Children.Add(rb);
@@ -413,10 +449,22 @@ namespace DesktopTodo
 
             Border del = BuildDeleteButton(item);
             del.Margin = new Thickness(2, 0, 0, 0);
+            del.Opacity = 0;
             g.Children.Add(del);
             Grid.SetColumn(del, 2);
 
+            card.MouseEnter += delegate { del.Opacity = 1; };
+            card.MouseLeave += delegate { del.Opacity = 0; };
+
             return card;
+        }
+
+        private static Brush DuePillBg(DateTime d)
+        {
+            DateTime today = DateTime.Now.Date;
+            if (d.Date < today) return BrushFrom(0xFD, 0xEC, 0xEC);
+            if (d.Date == today) return BrushFrom(0xFD, 0xF1, 0xDE);
+            return BrushFrom(0xF1, 0xF3, 0xF8);
         }
 
         private static string FmtTime(DateTime d)

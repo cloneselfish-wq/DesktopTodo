@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -19,11 +20,15 @@ namespace DesktopTodo
         private Border titleBar;
         private Border pinBtn;
         private TextBlock pinGlyph;
+        private TextBlock titleCount;
 
         private Border addPanel;
         private TextBox inputBox;
         private TextBlock inputPlaceholder;
         private DatePicker duePicker;
+        private Border dueChip;
+        private TextBlock dueChipText;
+        private Border dueChipClear;
 
         private ScrollViewer activeScroller;
         private StackPanel activeList;
@@ -45,8 +50,8 @@ namespace DesktopTodo
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             ShowActivated = false;
-            Background = BrushFrom(0xF6, 0xF7, 0xFA);
-            FontFamily = new FontFamily("Microsoft YaHei UI");
+            Background = Theme.PageBg;
+            FontFamily = new FontFamily("Segoe UI, Microsoft YaHei UI");
             FontSize = 13;
 
             Settings s = Store.Data.Settings;
@@ -86,7 +91,7 @@ namespace DesktopTodo
         private void BuildUi()
         {
             Grid root = new Grid();
-            RowDefinition r0 = new RowDefinition(); r0.Height = new GridLength(42);
+            RowDefinition r0 = new RowDefinition(); r0.Height = new GridLength(44);
             RowDefinition r1 = new RowDefinition(); r1.Height = GridLength.Auto;
             RowDefinition r2 = new RowDefinition(); r2.Height = new GridLength(1, GridUnitType.Star);
             RowDefinition r3 = new RowDefinition(); r3.Height = GridLength.Auto;
@@ -106,6 +111,8 @@ namespace DesktopTodo
 
             activeScroller = new ScrollViewer();
             activeScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            Style sbStyle = Theme.SlimScrollBar();
+            if (sbStyle != null) activeScroller.Resources.Add(typeof(ScrollBar), sbStyle);
             activeScroller.Margin = new Thickness(10, 8, 4, 0);
             activeList = new StackPanel();
             activeScroller.Content = activeList;
@@ -120,10 +127,9 @@ namespace DesktopTodo
         private Border BuildTitleBar()
         {
             titleBar = new Border();
-            titleBar.Background = new LinearGradientBrush(
-                Color.FromRgb(0x4F, 0x6B, 0xED),
-                Color.FromRgb(0x6C, 0x88, 0xF4),
-                90);
+            titleBar.Background = Brushes.White;
+            titleBar.BorderBrush = Theme.CardBorder;
+            titleBar.BorderThickness = new Thickness(0, 0, 0, 1);
             titleBar.MouseLeftButtonDown += TitleBar_MouseLeftButtonDown;
             titleBar.MouseMove += TitleBar_MouseMove;
             titleBar.MouseLeftButtonUp += TitleBar_MouseUp;
@@ -135,15 +141,37 @@ namespace DesktopTodo
             g.ColumnDefinitions.Add(c1);
             titleBar.Child = g;
 
+            StackPanel left = new StackPanel();
+            left.Orientation = Orientation.Horizontal;
+            left.VerticalAlignment = VerticalAlignment.Center;
+            left.Margin = new Thickness(14, 0, 0, 0);
+            g.Children.Add(left);
+            Grid.SetColumn(left, 0);
+
+            Border dot = new Border();
+            dot.Width = 9;
+            dot.Height = 9;
+            dot.CornerRadius = new CornerRadius(4.5);
+            dot.Background = Theme.Accent;
+            dot.VerticalAlignment = VerticalAlignment.Center;
+            left.Children.Add(dot);
+
             TextBlock title = new TextBlock();
             title.Text = "待办清单";
-            title.Foreground = Brushes.White;
-            title.FontWeight = FontWeights.Bold;
-            title.FontSize = 14;
+            title.Foreground = Theme.TextPrimary;
+            title.FontWeight = FontWeights.SemiBold;
+            title.FontSize = 13;
             title.VerticalAlignment = VerticalAlignment.Center;
-            title.Margin = new Thickness(14, 0, 0, 0);
-            g.Children.Add(title);
-            Grid.SetColumn(title, 0);
+            title.Margin = new Thickness(9, 0, 0, 0);
+            left.Children.Add(title);
+
+            titleCount = new TextBlock();
+            titleCount.Text = "";
+            titleCount.FontSize = 11.5;
+            titleCount.Foreground = Theme.TextTertiary;
+            titleCount.VerticalAlignment = VerticalAlignment.Center;
+            titleCount.Margin = new Thickness(8, 1, 0, 0);
+            left.Children.Add(titleCount);
 
             StackPanel btns = new StackPanel();
             btns.Orientation = Orientation.Horizontal;
@@ -152,52 +180,27 @@ namespace DesktopTodo
             g.Children.Add(btns);
             Grid.SetColumn(btns, 1);
 
-            pinBtn = MakeTitleIcon("\uE718", "窗口置顶", delegate { SetTopmost(!Topmost); });
+            pinBtn = Theme.GhostButton("\uE718", 12, "窗口置顶", false, delegate { SetTopmost(!Topmost); });
             pinGlyph = (TextBlock)pinBtn.Child;
             btns.Children.Add(pinBtn);
 
-            btns.Children.Add(MakeTitleIcon("\uE713", "设置", delegate { ShowSettings(); }));
-            btns.Children.Add(MakeTitleIcon("\uE921", "最小化", delegate { MinimizeOrHide(); }));
-            btns.Children.Add(MakeTitleIcon("\uE710", "隐藏到托盘", delegate { HideToTray(); }));
+            btns.Children.Add(Theme.GhostButton("\uE713", 12, "设置", false, delegate { ShowSettings(); }));
+            btns.Children.Add(Theme.GhostButton("\uE921", 12, "最小化", false, delegate { MinimizeOrHide(); }));
+            btns.Children.Add(Theme.GhostButton("\uE8BB", 12, "隐藏到托盘", true, delegate { HideToTray(); }));
 
             return titleBar;
-        }
-
-        private Border MakeTitleIcon(string glyph, string tooltip, Action onClick)
-        {
-            Border b = new Border();
-            b.Width = 34;
-            b.Height = 28;
-            b.CornerRadius = new CornerRadius(6);
-            b.Background = Brushes.Transparent;
-            b.Cursor = Cursors.Hand;
-            b.ToolTip = tooltip;
-
-            TextBlock t = new TextBlock();
-            t.Text = glyph;
-            t.FontFamily = new FontFamily("Segoe MDL2 Assets");
-            t.FontSize = 12;
-            t.Foreground = Brushes.White;
-            t.HorizontalAlignment = HorizontalAlignment.Center;
-            t.VerticalAlignment = VerticalAlignment.Center;
-            b.Child = t;
-
-            b.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { e.Handled = true; };
-            b.MouseEnter += delegate { b.Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)); };
-            b.MouseLeave += delegate { b.Background = Brushes.Transparent; };
-            b.MouseLeftButtonUp += delegate { onClick(); };
-            return b;
         }
 
         private Border BuildAddPanel()
         {
             addPanel = new Border();
             addPanel.Background = Brushes.White;
-            addPanel.CornerRadius = new CornerRadius(10);
-            addPanel.Margin = new Thickness(10, 8, 10, 0);
-            addPanel.Padding = new Thickness(10, 8, 10, 8);
-            addPanel.BorderBrush = BrushFrom(0xE8, 0xEA, 0xF0);
+            addPanel.CornerRadius = new CornerRadius(14);
+            addPanel.Margin = new Thickness(12, 10, 12, 2);
+            addPanel.Padding = new Thickness(12, 11, 10, 10);
+            addPanel.BorderBrush = Theme.CardBorder;
             addPanel.BorderThickness = new Thickness(1);
+            addPanel.Effect = Theme.CardShadow();
 
             Grid g = new Grid();
             RowDefinition r0 = new RowDefinition(); r0.Height = GridLength.Auto;
@@ -206,13 +209,19 @@ namespace DesktopTodo
             g.RowDefinitions.Add(r1);
             addPanel.Child = g;
 
+            // Input row: borderless text box + round accent add button
             Grid inputGrid = new Grid();
+            ColumnDefinition i0 = new ColumnDefinition(); i0.Width = new GridLength(1, GridUnitType.Star);
+            ColumnDefinition i1 = new ColumnDefinition(); i1.Width = GridLength.Auto;
+            inputGrid.ColumnDefinitions.Add(i0);
+            inputGrid.ColumnDefinitions.Add(i1);
+
             inputBox = new TextBox();
             inputBox.FontSize = 14;
             inputBox.BorderThickness = new Thickness(0);
             inputBox.Background = Brushes.Transparent;
             inputBox.VerticalContentAlignment = VerticalAlignment.Center;
-            inputBox.Padding = new Thickness(0, 2, 0, 2);
+            inputBox.Padding = new Thickness(2, 4, 2, 4);
             inputBox.TextChanged += delegate
             {
                 inputPlaceholder.Visibility = string.IsNullOrEmpty(inputBox.Text)
@@ -223,62 +232,141 @@ namespace DesktopTodo
                 if (e.Key == Key.Enter) AddItem();
             };
             inputPlaceholder = new TextBlock();
-            inputPlaceholder.Text = "输入待办事项，回车或点击添加…";
-            inputPlaceholder.Foreground = BrushFrom(0xB0, 0xB7, 0xC3);
+            inputPlaceholder.Text = "输入待办事项，回车添加…";
+            inputPlaceholder.Foreground = Theme.TextTertiary;
             inputPlaceholder.VerticalAlignment = VerticalAlignment.Center;
             inputPlaceholder.IsHitTestVisible = false;
             inputGrid.Children.Add(inputBox);
             inputGrid.Children.Add(inputPlaceholder);
+
+            Border addBtn = new Border();
+            addBtn.Width = 34;
+            addBtn.Height = 34;
+            addBtn.CornerRadius = new CornerRadius(17);
+            addBtn.Background = Theme.Accent;
+            addBtn.Cursor = Cursors.Hand;
+            addBtn.Margin = new Thickness(8, 0, 0, 0);
+            addBtn.VerticalAlignment = VerticalAlignment.Center;
+            TextBlock addTxt = Theme.Glyph("\uE710", 13, Brushes.White);
+            addTxt.FontWeight = FontWeights.SemiBold;
+            addTxt.HorizontalAlignment = HorizontalAlignment.Center;
+            addTxt.VerticalAlignment = VerticalAlignment.Center;
+            addBtn.Child = addTxt;
+            addBtn.MouseEnter += delegate { addBtn.Background = Theme.AccentDark; };
+            addBtn.MouseLeave += delegate { addBtn.Background = Theme.Accent; };
+            addBtn.MouseLeftButtonUp += delegate { AddItem(); };
+            inputGrid.Children.Add(addBtn);
+            Grid.SetColumn(addBtn, 1);
+
             g.Children.Add(inputGrid);
             Grid.SetRow(inputGrid, 0);
 
-            Grid row2 = new Grid();
-            ColumnDefinition d0 = new ColumnDefinition(); d0.Width = GridLength.Auto;
-            ColumnDefinition d1 = new ColumnDefinition(); d1.Width = GridLength.Auto;
-            ColumnDefinition d2 = new ColumnDefinition(); d2.Width = new GridLength(1, GridUnitType.Star);
-            ColumnDefinition d3 = new ColumnDefinition(); d3.Width = GridLength.Auto;
-            row2.ColumnDefinitions.Add(d0);
-            row2.ColumnDefinitions.Add(d1);
-            row2.ColumnDefinitions.Add(d2);
-            row2.ColumnDefinitions.Add(d3);
-            row2.Margin = new Thickness(0, 8, 0, 0);
+            // Chips row: due-date chip opens the (invisible) DatePicker's own popup
+            Grid chips = new Grid();
+            ColumnDefinition k0 = new ColumnDefinition(); k0.Width = GridLength.Auto;
+            ColumnDefinition k1 = new ColumnDefinition(); k1.Width = new GridLength(1, GridUnitType.Star);
+            ColumnDefinition k2 = new ColumnDefinition(); k2.Width = GridLength.Auto;
+            chips.ColumnDefinitions.Add(k0);
+            chips.ColumnDefinitions.Add(k1);
+            chips.ColumnDefinitions.Add(k2);
+            chips.Margin = new Thickness(0, 9, 0, 0);
 
-            TextBlock dueLabel = new TextBlock();
-            dueLabel.Text = "截止(可选):";
-            dueLabel.Foreground = BrushFrom(0x6B, 0x72, 0x80);
-            dueLabel.FontSize = 12;
-            dueLabel.VerticalAlignment = VerticalAlignment.Center;
-            row2.Children.Add(dueLabel);
-            Grid.SetColumn(dueLabel, 0);
+            Grid dueCell = new Grid();
+
+            dueChip = new Border();
+            dueChip.Background = Theme.ChipBg;
+            dueChip.BorderBrush = Theme.ChipBorder;
+            dueChip.BorderThickness = new Thickness(1);
+            dueChip.CornerRadius = new CornerRadius(13);
+            dueChip.Padding = new Thickness(10, 0, 8, 0);
+            dueChip.Height = 26;
+            dueChip.Cursor = Cursors.Hand;
+            dueChip.VerticalAlignment = VerticalAlignment.Center;
+            dueChip.HorizontalAlignment = HorizontalAlignment.Left;
+            StackPanel chipSp = new StackPanel();
+            chipSp.Orientation = Orientation.Horizontal;
+            TextBlock cal = Theme.Glyph("\uE787", 11, Theme.TextSecondary);
+            cal.VerticalAlignment = VerticalAlignment.Center;
+            dueChipText = new TextBlock();
+            dueChipText.Text = "截止日期";
+            dueChipText.FontSize = 11.5;
+            dueChipText.Foreground = Theme.TextSecondary;
+            dueChipText.VerticalAlignment = VerticalAlignment.Center;
+            dueChipText.Margin = new Thickness(5, 0, 0, 0);
+            dueChipClear = new Border();
+            dueChipClear.Width = 18;
+            dueChipClear.Height = 18;
+            dueChipClear.CornerRadius = new CornerRadius(9);
+            dueChipClear.Background = Brushes.Transparent;
+            dueChipClear.Margin = new Thickness(4, 0, 0, 0);
+            dueChipClear.VerticalAlignment = VerticalAlignment.Center;
+            dueChipClear.Visibility = Visibility.Collapsed;
+            TextBlock clr = Theme.Glyph("\uE711", 8, Theme.TextSecondary);
+            clr.HorizontalAlignment = HorizontalAlignment.Center;
+            clr.VerticalAlignment = VerticalAlignment.Center;
+            dueChipClear.Child = clr;
+            dueChipClear.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { e.Handled = true; };
+            dueChipClear.MouseLeftButtonUp += delegate(object sender, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                duePicker.SelectedDate = null;
+            };
+            chipSp.Children.Add(cal);
+            chipSp.Children.Add(dueChipText);
+            chipSp.Children.Add(dueChipClear);
+            dueChip.Child = chipSp;
+            dueChip.MouseEnter += delegate { dueChip.Background = BrushFrom(0xEF, 0xF1, 0xF7); };
+            dueChip.MouseLeave += delegate { dueChip.Background = Theme.ChipBg; };
+            dueChip.MouseLeftButtonUp += delegate
+            {
+                try { duePicker.IsDropDownOpen = true; }
+                catch { }
+            };
+            dueCell.Children.Add(dueChip);
 
             duePicker = new DatePicker();
-            duePicker.Width = 138;
-            duePicker.Margin = new Thickness(6, 0, 0, 0);
+            duePicker.Width = 150;
+            duePicker.Height = 26;
+            duePicker.Opacity = 0;
+            duePicker.IsHitTestVisible = false;
             duePicker.VerticalAlignment = VerticalAlignment.Center;
-            row2.Children.Add(duePicker);
-            Grid.SetColumn(duePicker, 1);
+            duePicker.HorizontalAlignment = HorizontalAlignment.Left;
+            duePicker.SelectedDateChanged += delegate { UpdateDueChip(); };
+            dueCell.Children.Add(duePicker);
 
-            Border addBtn = new Border();
-            addBtn.Background = BrushFrom(0x4F, 0x6B, 0xED);
-            addBtn.CornerRadius = new CornerRadius(7);
-            addBtn.Padding = new Thickness(14, 5, 14, 5);
-            addBtn.Cursor = Cursors.Hand;
-            addBtn.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock addTxt = new TextBlock();
-            addTxt.Text = "＋ 添加";
-            addTxt.Foreground = Brushes.White;
-            addTxt.FontWeight = FontWeights.SemiBold;
-            addBtn.Child = addTxt;
-            addBtn.MouseEnter += delegate { addBtn.Background = BrushFrom(0x43, 0x5C, 0xD6); };
-            addBtn.MouseLeave += delegate { addBtn.Background = BrushFrom(0x4F, 0x6B, 0xED); };
-            addBtn.MouseLeftButtonUp += delegate { AddItem(); };
-            row2.Children.Add(addBtn);
-            Grid.SetColumn(addBtn, 3);
+            chips.Children.Add(dueCell);
+            Grid.SetColumn(dueCell, 0);
 
-            g.Children.Add(row2);
-            Grid.SetRow(row2, 1);
+            TextBlock hint = new TextBlock();
+            hint.Text = "回车快速添加";
+            hint.FontSize = 11;
+            hint.Foreground = Theme.TextTertiary;
+            hint.VerticalAlignment = VerticalAlignment.Center;
+            hint.HorizontalAlignment = HorizontalAlignment.Right;
+            chips.Children.Add(hint);
+            Grid.SetColumn(hint, 2);
+
+            g.Children.Add(chips);
+            Grid.SetRow(chips, 1);
 
             return addPanel;
+        }
+
+        private void UpdateDueChip()
+        {
+            if (dueChipText == null) return;
+            if (duePicker.SelectedDate.HasValue)
+            {
+                dueChipText.Text = "截止 " + FmtDate(duePicker.SelectedDate.Value);
+                dueChipText.Foreground = Theme.Accent;
+                dueChipClear.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                dueChipText.Text = "截止日期";
+                dueChipText.Foreground = Theme.TextSecondary;
+                dueChipClear.Visibility = Visibility.Collapsed;
+            }
         }
 
         // ---------- window behaviors ----------
