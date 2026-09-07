@@ -126,11 +126,25 @@ namespace DesktopTodo
                 if (haveWorkerRect && haveWinRect)
                 {
                     // Coordinates become relative to the host layer after SetParent;
-                    // keep the same on-screen spot and force the window visible.
-                    SetWindowPos(hwnd, IntPtr.Zero,
-                        cr.Left - wr.Left, cr.Top - wr.Top,
-                        cr.Right - cr.Left, cr.Bottom - cr.Top,
-                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                    // keep the same on-screen spot, clamped so the widget cannot sit
+                    // outside the host layer (a child window is clipped to its parent,
+                    // which would make it invisible).
+                    int hostW = wr.Right - wr.Left, hostH = wr.Bottom - wr.Top;
+                    int cw = cr.Right - cr.Left, ch = cr.Bottom - cr.Top;
+                    int cx = cr.Left - wr.Left, cy = cr.Top - wr.Top;
+                    if (cx + cw > hostW) cx = hostW - cw;
+                    if (cy + ch > hostH) cy = hostH - ch;
+                    if (cx < 0) cx = 0;
+                    if (cy < 0) cy = 0;
+
+                    // Nudge the size by 1px and back so WPF receives WM_SIZE and rebuilds
+                    // its render target for the reparented hwnd. Without this the embedded
+                    // window only paints its background brush — the whole UI stays blank
+                    // (which looks exactly like the widget "disappeared").
+                    SetWindowPos(hwnd, IntPtr.Zero, cx, cy, cw + 1, ch + 1,
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    SetWindowPos(hwnd, IntPtr.Zero, cx, cy, cw, ch,
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 }
                 else
                 {

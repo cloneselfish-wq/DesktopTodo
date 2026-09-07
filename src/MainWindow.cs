@@ -445,7 +445,8 @@ namespace DesktopTodo
                     embedded = true;
                     Store.Data.Settings.DesktopEmbed = true;
                     Store.Save();
-                    if (tray != null) tray.ShowTip("桌面待办", "已贴入桌面壁纸层，可通过托盘菜单取消");
+                    NudgeRender();
+                    if (tray != null) tray.ShowTip("桌面待办", "已贴入桌面壁纸层：按 Win+D 显示桌面即可看到；托盘菜单可取消");
                 }
                 else
                 {
@@ -490,11 +491,31 @@ namespace DesktopTodo
                     Store.Save();
                     UpdatePinGlyph();
                 }
+                else
+                {
+                    NudgeRender();
+                }
             }
             catch (Exception ex)
             {
                 Logger.Log("ApplyEmbed: " + ex);
             }
+        }
+
+        // After reparenting into the wallpaper layer, WPF keeps compositing the stale
+        // top-level surface: only the background brush paints and the whole UI looks
+        // blank ("widget disappeared"). A hide/show cycle forces WPF to rebuild its
+        // render target for the child-window state. (DesktopHost.Embed additionally
+        // nudges the window size by 1px to raise a WM_SIZE.)
+        private void NudgeRender()
+        {
+            try
+            {
+                Hide();
+                Show();
+                InvalidateVisual();
+            }
+            catch (Exception ex) { Logger.Log("NudgeRender: " + ex.Message); }
         }
 
         // ---------- lifecycle ----------
