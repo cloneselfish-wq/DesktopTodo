@@ -251,8 +251,10 @@ namespace DesktopTodo
             g.Children.Add(content);
             Grid.SetColumn(content, 1);
 
-            // Text with an animated strike-through line drawn over it
+            // Text with an animated strike-through line drawn over it.
+            // Transparent background makes the whole row hit-testable for double-click edit.
             Grid textGrid = new Grid();
+            textGrid.Background = Brushes.Transparent;
             TextBlock txt = new TextBlock();
             txt.Text = item.Text;
             txt.TextWrapping = TextWrapping.Wrap;
@@ -260,6 +262,14 @@ namespace DesktopTodo
             txt.Foreground = Theme.TextPrimary;
             txt.HorizontalAlignment = HorizontalAlignment.Left;
             textGrid.Children.Add(txt);
+            textGrid.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
+            {
+                if (e.ClickCount == 2)
+                {
+                    e.Handled = true;
+                    ShowEditPopup(item);
+                }
+            };
 
             Rectangle strike = new Rectangle();
             strike.Height = 2;
@@ -317,23 +327,28 @@ namespace DesktopTodo
                 AnimateComplete(item, card, cb, check, txt, strike, st);
             };
 
+            StackPanel actions = new StackPanel();
+            actions.Orientation = Orientation.Horizontal;
+            actions.VerticalAlignment = VerticalAlignment.Center;
+            actions.Opacity = 0;
+            actions.Children.Add(BuildEditButton(item));
             Border del = BuildDeleteButton(item);
             del.Margin = new Thickness(2, 0, 0, 0);
-            del.Opacity = 0;
-            g.Children.Add(del);
-            Grid.SetColumn(del, 2);
+            actions.Children.Add(del);
+            g.Children.Add(actions);
+            Grid.SetColumn(actions, 2);
 
             card.MouseEnter += delegate
             {
                 card.BorderBrush = Theme.CardBorderHover;
                 card.Effect = Theme.CardShadow();
-                del.Opacity = 1;
+                actions.Opacity = 1;
             };
             card.MouseLeave += delegate
             {
                 card.BorderBrush = Theme.CardBorder;
                 card.Effect = null;
-                del.Opacity = 0;
+                actions.Opacity = 0;
             };
 
             return card;
