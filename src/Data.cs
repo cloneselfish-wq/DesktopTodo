@@ -5,6 +5,13 @@ using System.Web.Script.Serialization;
 
 namespace DesktopTodo
 {
+    public class SubTask
+    {
+        public string Id { get; set; }
+        public string Text { get; set; }
+        public bool Done { get; set; }
+    }
+
     public class TodoItem
     {
         public string Id { get; set; }
@@ -13,6 +20,40 @@ namespace DesktopTodo
         public DateTime CreatedAt { get; set; }
         public bool Completed { get; set; }
         public DateTime? CompletedAt { get; set; }
+        public List<SubTask> Subs { get; set; }
+
+        // Older data files have no Subs field at all, so reads must never assume non-null.
+        public List<SubTask> SubsList()
+        {
+            if (Subs == null) Subs = new List<SubTask>();
+            return Subs;
+        }
+
+        public int SubDoneCount()
+        {
+            int n = 0;
+            if (Subs != null)
+            {
+                foreach (SubTask s in Subs) if (s != null && s.Done) n++;
+            }
+            return n;
+        }
+
+        // Drops null/empty subentries, collapses an empty list back to null (keeps the JSON clean),
+        // and returns the clean list.
+        public List<SubTask> CleanSubs()
+        {
+            List<SubTask> clean = new List<SubTask>();
+            if (Subs != null)
+            {
+                foreach (SubTask s in Subs)
+                {
+                    if (s != null && !string.IsNullOrEmpty(s.Text)) clean.Add(s);
+                }
+            }
+            Subs = clean.Count > 0 ? clean : null;
+            return clean;
+        }
     }
 
     public class Settings
@@ -60,7 +101,11 @@ namespace DesktopTodo
                             List<TodoItem> clean = new List<TodoItem>();
                             foreach (TodoItem it in loaded.Items)
                             {
-                                if (it != null && !string.IsNullOrEmpty(it.Text)) clean.Add(it);
+                                if (it != null && !string.IsNullOrEmpty(it.Text))
+                                {
+                                    it.CleanSubs();
+                                    clean.Add(it);
+                                }
                             }
                             Data.Items = clean;
                         }

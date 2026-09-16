@@ -92,16 +92,21 @@ namespace DesktopTodo
         // Rounded-square check target; the caller animates its state on completion.
         public static Border CheckCircle()
         {
+            return CheckCircle(20, 7);
+        }
+
+        public static Border CheckCircle(double size, double radius)
+        {
             Border cb = new Border();
-            cb.Width = 20;
-            cb.Height = 20;
-            cb.CornerRadius = new CornerRadius(7);
+            cb.Width = size;
+            cb.Height = size;
+            cb.CornerRadius = new CornerRadius(radius);
             cb.BorderBrush = CheckBorder;
             cb.BorderThickness = new Thickness(1.5);
             cb.Background = Brushes.White;
             cb.Cursor = Cursors.Hand;
 
-            TextBlock check = Glyph("\uE73E", 10, Brushes.White);
+            TextBlock check = Glyph("\uE73E", size / 2, Brushes.White);
             check.FontWeight = FontWeights.Bold;
             check.HorizontalAlignment = HorizontalAlignment.Center;
             check.VerticalAlignment = VerticalAlignment.Center;

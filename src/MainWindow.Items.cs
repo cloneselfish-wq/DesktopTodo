@@ -21,6 +21,9 @@ namespace DesktopTodo
         private StackPanel doneList;
         private bool doneOpen;
 
+        // Items whose checklist the user has collapsed; everything with subtasks starts expanded.
+        private readonly HashSet<string> subCollapsed = new HashSet<string>();
+
         private Border BuildDoneSection()
         {
             doneSection = new Border();
@@ -217,6 +220,27 @@ namespace DesktopTodo
             return db;
         }
 
+        // Small rounded-square check target used by subtask rows (card and edit popup).
+        private static Border MiniCheck(bool done, double size)
+        {
+            Border b = new Border();
+            b.Width = size;
+            b.Height = size;
+            b.CornerRadius = new CornerRadius(size * 0.3);
+            b.BorderThickness = new Thickness(1.4);
+            b.BorderBrush = done ? Theme.Accent : Theme.CheckBorder;
+            b.Background = done ? Theme.Accent : Brushes.White;
+            b.Cursor = Cursors.Hand;
+
+            TextBlock ck = Theme.Glyph("\uE73E", size * 0.5, Brushes.White);
+            ck.FontWeight = FontWeights.Bold;
+            ck.HorizontalAlignment = HorizontalAlignment.Center;
+            ck.VerticalAlignment = VerticalAlignment.Center;
+            ck.Visibility = done ? Visibility.Visible : Visibility.Collapsed;
+            b.Child = ck;
+            return b;
+        }
+
         private UIElement BuildActiveCard(TodoItem item)
         {
             Border card = new Border();
@@ -320,6 +344,103 @@ namespace DesktopTodo
             badges.Children.Add(created);
 
             content.Children.Add(badges);
+
+            // Subtask checklist: a progress chip, plus the expanded rows with checkable boxes.
+            List<SubTask> subs = item.CleanSubs();
+            if (subs.Count > 0)
+            {
+                int doneCount = item.SubDoneCount();
+                bool expanded = !subCollapsed.Contains(item.Id);
+
+                Border subChip = new Border();
+                subChip.Background = Theme.ChipBg;
+                subChip.CornerRadius = new CornerRadius(9);
+                subChip.Padding = new Thickness(7, 2, 6, 3);
+                subChip.VerticalAlignment = VerticalAlignment.Center;
+                subChip.HorizontalAlignment = HorizontalAlignment.Left;
+                subChip.Cursor = Cursors.Hand;
+                subChip.Margin = new Thickness(0, 6, 0, 0);
+                subChip.ToolTip = expanded ? "收起具体事项" : "展开具体事项";
+                subChip.MouseEnter += delegate { subChip.Background = BrushFrom(0xEF, 0xF1, 0xF7); };
+                subChip.MouseLeave += delegate { subChip.Background = Theme.ChipBg; };
+                subChip.MouseLeftButtonUp += delegate
+                {
+                    if (subCollapsed.Contains(item.Id)) subCollapsed.Remove(item.Id);
+                    else subCollapsed.Add(item.Id);
+                    RefreshAll();
+                };
+
+                SolidColorBrush subBrush = doneCount == subs.Count ? Theme.Accent : Theme.TextSecondary;
+                StackPanel chipSp = new StackPanel();
+                chipSp.Orientation = Orientation.Horizontal;
+                TextBlock subIco = Theme.Glyph("\uE73A", 10, subBrush);
+                subIco.VerticalAlignment = VerticalAlignment.Center;
+                TextBlock subTxt = new TextBlock();
+                subTxt.Text = "子事项 " + doneCount + "/" + subs.Count;
+                subTxt.FontSize = 11;
+                subTxt.Foreground = subBrush;
+                subTxt.VerticalAlignment = VerticalAlignment.Center;
+                subTxt.Margin = new Thickness(4, 0, 0, 0);
+                TextBlock subChev = Theme.Glyph(expanded ? "\uE70D" : "\uE70E", 9, subBrush);
+                subChev.VerticalAlignment = VerticalAlignment.Center;
+                subChev.Margin = new Thickness(4, -1, 0, 0);
+                chipSp.Children.Add(subIco);
+                chipSp.Children.Add(subTxt);
+                chipSp.Children.Add(subChev);
+                subChip.Child = chipSp;
+                content.Children.Add(subChip);
+
+                if (expanded)
+                {
+                    StackPanel subList = new StackPanel();
+                    subList.Margin = new Thickness(0, 4, 0, 0);
+                    foreach (SubTask sub in subs)
+                    {
+                        Grid srow = new Grid();
+                        srow.Margin = new Thickness(0, 2, 0, 0);
+                        ColumnDefinition sc0 = new ColumnDefinition(); sc0.Width = GridLength.Auto;
+                        ColumnDefinition sc1 = new ColumnDefinition(); sc1.Width = new GridLength(1, GridUnitType.Star);
+                        srow.ColumnDefinitions.Add(sc0);
+                        srow.ColumnDefinitions.Add(sc1);
+
+                        Border scb = MiniCheck(sub.Done, 15);
+                        scb.VerticalAlignment = VerticalAlignment.Top;
+                        scb.Margin = new Thickness(1, 2, 0, 0);
+                        scb.MouseEnter += delegate { if (!sub.Done) scb.BorderBrush = Theme.Accent; };
+                        scb.MouseLeave += delegate { if (!sub.Done) scb.BorderBrush = Theme.CheckBorder; };
+                        scb.MouseLeftButtonUp += delegate(object sender, MouseButtonEventArgs e)
+                        {
+                            e.Handled = true;
+                            sub.Done = !sub.Done;
+                            Store.Save();
+                            RefreshAll();
+                        };
+                        srow.Children.Add(scb);
+                        Grid.SetColumn(scb, 0);
+
+                        TextBlock stxt = new TextBlock();
+                        stxt.Text = sub.Text;
+                        stxt.TextWrapping = TextWrapping.Wrap;
+                        stxt.FontSize = 12.5;
+                        stxt.VerticalAlignment = VerticalAlignment.Center;
+                        stxt.Margin = new Thickness(7, 0, 4, 0);
+                        if (sub.Done)
+                        {
+                            stxt.Foreground = Theme.TextTertiary;
+                            stxt.TextDecorations = TextDecorations.Strikethrough;
+                        }
+                        else
+                        {
+                            stxt.Foreground = Theme.TextSecondary;
+                        }
+                        srow.Children.Add(stxt);
+                        Grid.SetColumn(stxt, 1);
+
+                        subList.Children.Add(srow);
+                    }
+                    content.Children.Add(subList);
+                }
+            }
 
             cb.MouseLeftButtonUp += delegate
             {
