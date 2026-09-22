@@ -90,11 +90,29 @@ namespace DesktopTodo
             if (activeList == null || doneHeaderText == null) return;
             activeList.Children.Clear();
 
-            List<TodoItem> active = Store.GetActiveSorted();
+            string q = SearchQuery;
+            bool filtering = q.Length > 0;
+
+            List<TodoItem> activeAll = Store.GetActiveSorted();
+            List<TodoItem> active = filtering
+                ? activeAll.FindAll(delegate(TodoItem i) { return ItemMatches(i, q); })
+                : activeAll;
 
             if (titleCount != null)
             {
-                titleCount.Text = active.Count == 0 ? "" : "· " + active.Count + " 项";
+                titleCount.Text = activeAll.Count == 0 ? "" : "· " + activeAll.Count + " 项";
+            }
+            if (searchCountHint != null)
+            {
+                if (filtering)
+                {
+                    searchCountHint.Text = active.Count + "/" + activeAll.Count;
+                    searchCountHint.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    searchCountHint.Visibility = Visibility.Collapsed;
+                }
             }
 
             if (active.Count == 0)
@@ -114,23 +132,31 @@ namespace DesktopTodo
                     ig.HorizontalAlignment = HorizontalAlignment.Center;
                     ig.VerticalAlignment = VerticalAlignment.Center;
                     ico.Child = ig;
-                    TextBlock t1 = new TextBlock();
-                    t1.Text = "今天没有待办";
-                    t1.FontSize = 13;
-                    t1.FontWeight = FontWeights.SemiBold;
-                    t1.Foreground = BrushFrom(0x8A, 0x93, 0xA6);
-                    t1.HorizontalAlignment = HorizontalAlignment.Center;
-                    t1.Margin = new Thickness(0, 12, 0, 0);
-                    TextBlock t2 = new TextBlock();
-                    t2.Text = "在上方输入，回车添加一条吧";
-                    t2.FontSize = 11.5;
-                    t2.Foreground = BrushFrom(0xB0, 0xB7, 0xC3);
-                    t2.HorizontalAlignment = HorizontalAlignment.Center;
-                    t2.Margin = new Thickness(0, 4, 0, 0);
+                    emptyStateTitle = new TextBlock();
+                    emptyStateTitle.FontSize = 13;
+                    emptyStateTitle.FontWeight = FontWeights.SemiBold;
+                    emptyStateTitle.Foreground = BrushFrom(0x8A, 0x93, 0xA6);
+                    emptyStateTitle.HorizontalAlignment = HorizontalAlignment.Center;
+                    emptyStateTitle.Margin = new Thickness(0, 12, 0, 0);
+                    emptyStateSub = new TextBlock();
+                    emptyStateSub.FontSize = 11.5;
+                    emptyStateSub.Foreground = BrushFrom(0xB0, 0xB7, 0xC3);
+                    emptyStateSub.HorizontalAlignment = HorizontalAlignment.Center;
+                    emptyStateSub.Margin = new Thickness(0, 4, 0, 0);
                     esp.Children.Add(ico);
-                    esp.Children.Add(t1);
-                    esp.Children.Add(t2);
+                    esp.Children.Add(emptyStateTitle);
+                    esp.Children.Add(emptyStateSub);
                     emptyState.Child = esp;
+                }
+                if (filtering)
+                {
+                    emptyStateTitle.Text = "没有匹配的待办";
+                    emptyStateSub.Text = "换个关键词试试，或点右上角 ✕ 清除搜索";
+                }
+                else
+                {
+                    emptyStateTitle.Text = "今天没有待办";
+                    emptyStateSub.Text = "在上方输入，回车添加一条吧";
                 }
                 activeList.Children.Add(emptyState);
             }
@@ -142,15 +168,38 @@ namespace DesktopTodo
                 }
             }
 
-            List<TodoItem> done = Store.GetDoneSorted();
-            doneHeaderText.Text = "已划掉 (" + done.Count + ")";
+            List<TodoItem> doneAll = Store.GetDoneSorted();
+            List<TodoItem> done = filtering
+                ? doneAll.FindAll(delegate(TodoItem i) { return ItemMatches(i, q); })
+                : doneAll;
+            doneHeaderText.Text = filtering
+                ? "已划掉 (" + done.Count + "/" + doneAll.Count + ")"
+                : "已划掉 (" + doneAll.Count + ")";
             doneArrow.Text = doneOpen ? "\uE70D" : "\uE70E";
+            // When filtering and nothing in done matches, keep the panel collapsed regardless of doneOpen.
             doneBody.Visibility = (doneOpen && done.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
             doneList.Children.Clear();
             foreach (TodoItem it in done)
             {
                 doneList.Children.Add(BuildDoneCard(it));
             }
+        }
+
+        // Case-insensitive substring match against the item text and any subtask text.
+        private static bool ItemMatches(TodoItem it, string q)
+        {
+            if (it == null || string.IsNullOrEmpty(q)) return true;
+            if (!string.IsNullOrEmpty(it.Text)
+                && it.Text.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (it.Subs != null)
+            {
+                foreach (SubTask s in it.Subs)
+                {
+                    if (s != null && !string.IsNullOrEmpty(s.Text)
+                        && s.Text.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                }
+            }
+            return false;
         }
 
         private void AddItem()

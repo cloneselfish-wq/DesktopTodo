@@ -30,9 +30,18 @@ namespace DesktopTodo
         private TextBlock dueChipText;
         private Border dueChipClear;
 
+        // Search bar: filters the active and done lists by keyword (item text or subtask text).
+        private Border searchBar;
+        private TextBox searchBox;
+        private TextBlock searchPlaceholder;
+        private Border searchClear;
+        private TextBlock searchCountHint;
+
         private ScrollViewer activeScroller;
         private StackPanel activeList;
         private Border emptyState;
+        private TextBlock emptyStateTitle;
+        private TextBlock emptyStateSub;
 
         private bool embedded;
         private bool embedDragging;
@@ -93,12 +102,14 @@ namespace DesktopTodo
             Grid root = new Grid();
             RowDefinition r0 = new RowDefinition(); r0.Height = new GridLength(44);
             RowDefinition r1 = new RowDefinition(); r1.Height = GridLength.Auto;
-            RowDefinition r2 = new RowDefinition(); r2.Height = new GridLength(1, GridUnitType.Star);
-            RowDefinition r3 = new RowDefinition(); r3.Height = GridLength.Auto;
+            RowDefinition r2 = new RowDefinition(); r2.Height = GridLength.Auto;
+            RowDefinition r3 = new RowDefinition(); r3.Height = new GridLength(1, GridUnitType.Star);
+            RowDefinition r4 = new RowDefinition(); r4.Height = GridLength.Auto;
             root.RowDefinitions.Add(r0);
             root.RowDefinitions.Add(r1);
             root.RowDefinitions.Add(r2);
             root.RowDefinitions.Add(r3);
+            root.RowDefinitions.Add(r4);
             Content = root;
 
             Border tb = BuildTitleBar();
@@ -109,6 +120,10 @@ namespace DesktopTodo
             Grid.SetRow(ap, 1);
             root.Children.Add(ap);
 
+            Border sb = BuildSearchBar();
+            Grid.SetRow(sb, 2);
+            root.Children.Add(sb);
+
             activeScroller = new ScrollViewer();
             activeScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             Style sbStyle = Theme.SlimScrollBar();
@@ -116,11 +131,11 @@ namespace DesktopTodo
             activeScroller.Margin = new Thickness(10, 8, 4, 0);
             activeList = new StackPanel();
             activeScroller.Content = activeList;
-            Grid.SetRow(activeScroller, 2);
+            Grid.SetRow(activeScroller, 3);
             root.Children.Add(activeScroller);
 
             Border ds = BuildDoneSection();
-            Grid.SetRow(ds, 3);
+            Grid.SetRow(ds, 4);
             root.Children.Add(ds);
         }
 
@@ -367,6 +382,133 @@ namespace DesktopTodo
                 dueChipText.Foreground = Theme.TextSecondary;
                 dueChipClear.Visibility = Visibility.Collapsed;
             }
+        }
+
+        // ---------- search bar ----------
+
+        // Current trimmed query; empty when the box is missing or blank.
+        private string SearchQuery
+        {
+            get
+            {
+                if (searchBox == null) return "";
+                string t = searchBox.Text;
+                if (string.IsNullOrEmpty(t)) return "";
+                return t.Trim();
+            }
+        }
+
+        private Border BuildSearchBar()
+        {
+            searchBar = new Border();
+            searchBar.Background = Brushes.White;
+            searchBar.CornerRadius = new CornerRadius(10);
+            searchBar.Margin = new Thickness(12, 4, 12, 0);
+            searchBar.Padding = new Thickness(10, 0, 6, 0);
+            searchBar.Height = 32;
+            searchBar.BorderBrush = Theme.CardBorder;
+            searchBar.BorderThickness = new Thickness(1);
+
+            Grid g = new Grid();
+            ColumnDefinition c0 = new ColumnDefinition(); c0.Width = GridLength.Auto;
+            ColumnDefinition c1 = new ColumnDefinition(); c1.Width = new GridLength(1, GridUnitType.Star);
+            ColumnDefinition c2 = new ColumnDefinition(); c2.Width = GridLength.Auto;
+            ColumnDefinition c3 = new ColumnDefinition(); c3.Width = GridLength.Auto;
+            g.ColumnDefinitions.Add(c0);
+            g.ColumnDefinitions.Add(c1);
+            g.ColumnDefinitions.Add(c2);
+            g.ColumnDefinitions.Add(c3);
+
+            TextBlock ico = Theme.Glyph("\uE721", 12, Theme.TextTertiary);
+            ico.VerticalAlignment = VerticalAlignment.Center;
+            ico.Margin = new Thickness(2, 0, 6, 0);
+            g.Children.Add(ico);
+
+            searchBox = new TextBox();
+            searchBox.FontSize = 12.5;
+            searchBox.BorderThickness = new Thickness(0);
+            searchBox.Background = Brushes.Transparent;
+            searchBox.VerticalContentAlignment = VerticalAlignment.Center;
+            searchBox.Padding = new Thickness(0);
+            Grid.SetColumn(searchBox, 1);
+            g.Children.Add(searchBox);
+
+            searchPlaceholder = new TextBlock();
+            searchPlaceholder.Text = "搜索待办关键字（含子事项）";
+            searchPlaceholder.FontSize = 12.5;
+            searchPlaceholder.Foreground = Theme.TextTertiary;
+            searchPlaceholder.VerticalAlignment = VerticalAlignment.Center;
+            searchPlaceholder.IsHitTestVisible = false;
+            Grid.SetColumn(searchPlaceholder, 1);
+            g.Children.Add(searchPlaceholder);
+
+            searchCountHint = new TextBlock();
+            searchCountHint.FontSize = 11;
+            searchCountHint.Foreground = Theme.TextTertiary;
+            searchCountHint.VerticalAlignment = VerticalAlignment.Center;
+            searchCountHint.Margin = new Thickness(4, 1, 4, 0);
+            searchCountHint.Visibility = Visibility.Collapsed;
+            Grid.SetColumn(searchCountHint, 2);
+            g.Children.Add(searchCountHint);
+
+            searchClear = new Border();
+            searchClear.Width = 20;
+            searchClear.Height = 20;
+            searchClear.CornerRadius = new CornerRadius(10);
+            searchClear.Background = Brushes.Transparent;
+            searchClear.Cursor = Cursors.Hand;
+            searchClear.VerticalAlignment = VerticalAlignment.Center;
+            searchClear.Margin = new Thickness(2, 0, 2, 0);
+            searchClear.Visibility = Visibility.Collapsed;
+            TextBlock clr = Theme.Glyph("\uE711", 8, Theme.TextSecondary);
+            clr.HorizontalAlignment = HorizontalAlignment.Center;
+            clr.VerticalAlignment = VerticalAlignment.Center;
+            searchClear.Child = clr;
+            searchClear.MouseEnter += delegate { searchClear.Background = Theme.HoverFill; };
+            searchClear.MouseLeave += delegate { searchClear.Background = Brushes.Transparent; };
+            searchClear.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { e.Handled = true; };
+            searchClear.MouseLeftButtonUp += delegate(object sender, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                searchBox.Text = "";
+                searchBox.Focus();
+            };
+            Grid.SetColumn(searchClear, 3);
+            g.Children.Add(searchClear);
+
+            searchBar.Child = g;
+
+            searchBox.TextChanged += delegate
+            {
+                bool has = !string.IsNullOrEmpty(searchBox.Text);
+                searchPlaceholder.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
+                searchClear.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+                RefreshAll();
+            };
+            searchBox.KeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.Escape)
+                {
+                    searchBox.Text = "";
+                    e.Handled = true;
+                }
+            };
+
+            // Ctrl+F anywhere in the window focuses the search box and selects existing text.
+            PreviewKeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+                {
+                    if (searchBox != null)
+                    {
+                        searchBox.Focus();
+                        searchBox.SelectAll();
+                        e.Handled = true;
+                    }
+                }
+            };
+
+            return searchBar;
         }
 
         // ---------- window behaviors ----------
