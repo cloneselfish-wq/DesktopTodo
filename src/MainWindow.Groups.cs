@@ -24,12 +24,14 @@ namespace DesktopTodo
         private TextBlock groupFilterChev;
         private List<TodoItem> lastVisible;
         private Window groupFilterMenu;
+        private Action groupFilterMenuClose;
         private TextBlock addHint;
 
         // Groups the user has collapsed, keyed by group id (GroupNone for the ungrouped bucket).
         private readonly HashSet<string> groupCollapsed = new HashSet<string>();
 
         private Window groupPicker;
+        private Action groupPickerClose;
         private Window groupDialog;
 
         // ---------- group filter bar ----------
@@ -147,8 +149,10 @@ namespace DesktopTodo
         {
             if (groupFilterMenu != null)
             {
-                groupFilterMenu.Close();
+                Action prev = groupFilterMenuClose;
                 groupFilterMenu = null;
+                groupFilterMenuClose = null;
+                if (prev != null) prev();
                 return;
             }
 
@@ -156,6 +160,8 @@ namespace DesktopTodo
 
             Window w = new Window();
             groupFilterMenu = w;
+            Action close = MakeCloser(w);
+            groupFilterMenuClose = close;
             w.Title = "选择分组";
             w.Width = 196;
             w.SizeToContent = SizeToContent.Height;
@@ -187,13 +193,13 @@ namespace DesktopTodo
             StackPanel sp = new StackPanel();
             sv.Content = sp;
 
-            sp.Children.Add(BuildFilterRow(w, GroupAll, "全部分组", visible.Count, null));
+            sp.Children.Add(BuildFilterRow(close, GroupAll, "全部分组", visible.Count, null));
             foreach (TodoGroup g in Store.Groups())
             {
-                sp.Children.Add(BuildFilterRow(w, g.Id, g.Name,
+                sp.Children.Add(BuildFilterRow(close, g.Id, g.Name,
                     Store.CountInGroup(visible, g.Id), GroupDot(GroupIndex(g.Id))));
             }
-            sp.Children.Add(BuildFilterRow(w, GroupNone, "未分组",
+            sp.Children.Add(BuildFilterRow(close, GroupNone, "未分组",
                 Store.CountInGroup(visible, GroupNone), BrushFrom(0xB0, 0xB7, 0xC3)));
 
             Border divider = new Border();
@@ -223,7 +229,7 @@ namespace DesktopTodo
             newRow.MouseLeave += delegate { newRow.Background = Brushes.Transparent; };
             newRow.MouseLeftButtonUp += delegate
             {
-                w.Close();
+                close();
                 NewGroupFlow();
             };
             sp.Children.Add(newRow);
@@ -245,12 +251,19 @@ namespace DesktopTodo
                 if (w.Top + w.ActualHeight > wa.Bottom - 6)
                     w.Top = Math.Max(wa.Top + 6, dip.Y - 6 - w.ActualHeight);
             };
-            w.Closed += delegate { if (groupFilterMenu == w) groupFilterMenu = null; };
-            w.Deactivated += delegate { w.Close(); };
+            w.Closed += delegate
+            {
+                if (groupFilterMenu == w)
+                {
+                    groupFilterMenu = null;
+                    groupFilterMenuClose = null;
+                }
+            };
+            w.Deactivated += delegate { close(); };
             w.Show();
         }
 
-        private Border BuildFilterRow(Window w, string key, string label, int count, Brush dot)
+        private Border BuildFilterRow(Action close, string key, string label, int count, Brush dot)
         {
             bool current = groupFilter == key;
 
@@ -316,7 +329,7 @@ namespace DesktopTodo
             row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
             row.MouseLeftButtonUp += delegate
             {
-                w.Close();
+                close();
                 if (current) return;
                 groupFilter = key;
                 RefreshAll();
@@ -531,13 +544,17 @@ namespace DesktopTodo
         {
             if (groupPicker != null)
             {
-                groupPicker.Close();
+                Action prev = groupPickerClose;
                 groupPicker = null;
+                groupPickerClose = null;
+                if (prev != null) prev();
                 return;
             }
 
             Window w = new Window();
             groupPicker = w;
+            Action close = MakeCloser(w);
+            groupPickerClose = close;
             w.Title = "移入分组";
             w.Width = 190;
             w.SizeToContent = SizeToContent.Height;
@@ -577,7 +594,7 @@ namespace DesktopTodo
             {
                 bool current = Store.InGroup(item, id);
                 string label = id == GroupNone ? "未分组" : Store.GroupName(id);
-                sp.Children.Add(BuildPickerRow(w, label, current, id == GroupNone ? null : id, item));
+                sp.Children.Add(BuildPickerRow(close, label, current, id == GroupNone ? null : id, item));
             }
 
             Border divider = new Border();
@@ -607,7 +624,7 @@ namespace DesktopTodo
             newRow.MouseLeave += delegate { newRow.Background = Brushes.Transparent; };
             newRow.MouseLeftButtonUp += delegate
             {
-                w.Close();
+                close();
                 ShowGroupDialog("新建分组", "", "创建并移入", delegate(string name)
                 {
                     TodoGroup g = Store.AddGroup(name);
@@ -637,13 +654,20 @@ namespace DesktopTodo
                 if (w.Top + w.ActualHeight > wa.Bottom - 6)
                     w.Top = Math.Max(wa.Top + 6, dip.Y - 6 - w.ActualHeight);
             };
-            w.Closed += delegate { if (groupPicker == w) groupPicker = null; };
+            w.Closed += delegate
+            {
+                if (groupPicker == w)
+                {
+                    groupPicker = null;
+                    groupPickerClose = null;
+                }
+            };
             // Click anywhere else (including back on the widget) dismisses the picker.
-            w.Deactivated += delegate { w.Close(); };
+            w.Deactivated += delegate { close(); };
             w.Show();
         }
 
-        private Border BuildPickerRow(Window w, string label, bool current, string groupId, TodoItem item)
+        private Border BuildPickerRow(Action close, string label, bool current, string groupId, TodoItem item)
         {
             Border row = new Border();
             row.CornerRadius = new CornerRadius(8);
@@ -680,7 +704,7 @@ namespace DesktopTodo
             row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
             row.MouseLeftButtonUp += delegate
             {
-                w.Close();
+                close();
                 if (current) return;
                 Store.MoveItem(item.Id, groupId);
                 Store.Save();
@@ -819,6 +843,22 @@ namespace DesktopTodo
         }
 
         // ---------- helpers ----------
+
+        // A popup can be dismissed from several directions at once: clicking a row closes
+        // it, and the focus loss that follows fires Deactivated, which tries to close it
+        // again. WPF rejects a second Close while the window is already closing
+        // ("在 Window 关闭时…"), so every path shares one idempotent closer.
+        internal static Action MakeCloser(Window w)
+        {
+            bool[] done = new bool[1];
+            return delegate
+            {
+                if (done[0]) return;
+                done[0] = true;
+                try { w.Close(); }
+                catch (Exception ex) { Logger.Log("Close window: " + ex.Message); }
+            };
+        }
 
         private int GroupIndex(string id)
         {

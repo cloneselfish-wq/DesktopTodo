@@ -18,6 +18,7 @@ namespace DesktopTodo
 
             Window w = new Window();
             settingsWindow = w;
+            Action close = MakeCloser(w);
             w.Title = "设置";
             w.Width = 292;
             w.Height = 202;
@@ -70,7 +71,7 @@ namespace DesktopTodo
             hg.Children.Add(title);
             Grid.SetColumn(title, 0);
 
-            hg.Children.Add(MakeSettingsIconButton("\uE711", delegate { w.Close(); }));
+            hg.Children.Add(MakeSettingsIconButton("\uE711", delegate { close(); }));
             Grid.SetColumn((Border)hg.Children[hg.Children.Count - 1], 1);
 
             // Toggles (state is re-read after each change so failed operations revert)
@@ -89,7 +90,7 @@ namespace DesktopTodo
                 delegate(bool on) { if (on != IsEmbedded) ToggleEmbed(); }));
 
             w.Closed += delegate { settingsWindow = null; };
-            w.Deactivated += delegate { w.Close(); };
+            w.Deactivated += delegate { close(); };
             w.Show();
         }
 
