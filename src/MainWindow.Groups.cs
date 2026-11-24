@@ -17,7 +17,13 @@ namespace DesktopTodo
 
         private string groupFilter = GroupAll;
         private Border groupBar;
-        private WrapPanel groupChips;
+        private Border groupFilterChip;
+        private Border groupFilterDot;
+        private TextBlock groupFilterLabel;
+        private TextBlock groupFilterCount;
+        private TextBlock groupFilterChev;
+        private List<TodoItem> lastVisible;
+        private Window groupFilterMenu;
         private TextBlock addHint;
 
         // Groups the user has collapsed, keyed by group id (GroupNone for the ungrouped bucket).
@@ -26,74 +32,244 @@ namespace DesktopTodo
         private Window groupPicker;
         private Window groupDialog;
 
-        // ---------- chip bar ----------
+        // ---------- group filter bar ----------
 
+        // One compact row: the current filter as a single chip that opens the full group
+        // list, plus a button to create a group. Fixed height, so adding groups never eats
+        // into the todo list the way a wrapped row of chips did.
         private Border BuildGroupBar()
         {
             groupBar = new Border();
             groupBar.Background = Brushes.Transparent;
-            groupBar.Margin = new Thickness(12, 4, 8, 0);
+            groupBar.Margin = new Thickness(12, 3, 8, 0);
+            groupBar.Height = 26;
 
-            // A WrapPanel instead of a single scrolling row: with a handful of groups the
-            // chips wrap onto a second line instead of being clipped on the right.
-            groupChips = new WrapPanel();
-            groupChips.Margin = new Thickness(0, 1, 0, 0);
-            groupBar.Child = groupChips;
+            Grid g = new Grid();
+            ColumnDefinition c0 = new ColumnDefinition(); c0.Width = new GridLength(1, GridUnitType.Star);
+            ColumnDefinition c1 = new ColumnDefinition(); c1.Width = GridLength.Auto;
+            g.ColumnDefinitions.Add(c0);
+            g.ColumnDefinitions.Add(c1);
+            groupBar.Child = g;
 
-            return groupBar;
-        }
-
-        // Rebuilds the chip row; counts follow the current search so the numbers
-        // always match what the list below actually shows.
-        private void RefreshGroupBar(List<TodoItem> visible)
-        {
-            if (groupChips == null) return;
-            groupChips.Children.Clear();
-
-            groupChips.Children.Add(BuildGroupChip(GroupAll, "全部", visible.Count, null));
-
-            foreach (TodoGroup g in Store.Groups())
-            {
-                int n = Store.CountInGroup(visible, g.Id);
-                if (n == 0 && groupFilter != g.Id) continue;
-                groupChips.Children.Add(BuildGroupChip(g.Id, g.Name, n, GroupDot(GroupIndex(g.Id))));
-            }
-
-            int none = Store.CountInGroup(visible, GroupNone);
-            if (none > 0 || groupFilter == GroupNone)
-            {
-                groupChips.Children.Add(BuildGroupChip(GroupNone, "未分组", none,
-                    BrushFrom(0xB0, 0xB7, 0xC3)));
-            }
-
-            groupChips.Children.Add(BuildNewGroupChip());
-
-            if (addHint != null)
-            {
-                if (groupFilter == GroupAll) addHint.Text = "回车快速添加";
-                else addHint.Text = "添加到 " + FilterName();
-            }
-        }
-
-        private Border BuildGroupChip(string key, string label, int count, Brush dot)
-        {
-            bool on = groupFilter == key;
-
-            Border chip = new Border();
-            chip.Height = 23;
-            chip.CornerRadius = new CornerRadius(11.5);
-            chip.Padding = new Thickness(8, 0, 8, 0);
-            chip.Margin = new Thickness(0, 2, 5, 2);
-            chip.Cursor = Cursors.Hand;
-            chip.VerticalAlignment = VerticalAlignment.Center;
-            chip.Background = on ? Theme.Accent : Brushes.White;
-            chip.BorderThickness = new Thickness(1);
-            chip.BorderBrush = on ? Theme.Accent : Theme.ChipBorder;
-            chip.ToolTip = on ? "已在「" + label + "」中" : "只看「" + label + "」";
+            groupFilterChip = new Border();
+            groupFilterChip.Height = 24;
+            groupFilterChip.CornerRadius = new CornerRadius(12);
+            groupFilterChip.Padding = new Thickness(9, 0, 7, 0);
+            groupFilterChip.Cursor = Cursors.Hand;
+            groupFilterChip.HorizontalAlignment = HorizontalAlignment.Left;
+            groupFilterChip.VerticalAlignment = VerticalAlignment.Center;
+            groupFilterChip.Background = Brushes.White;
+            groupFilterChip.BorderThickness = new Thickness(1);
+            groupFilterChip.BorderBrush = Theme.ChipBorder;
+            groupFilterChip.ToolTip = "切换分组";
+            groupFilterChip.MouseLeftButtonUp += delegate { ToggleGroupFilterMenu(); };
 
             StackPanel sp = new StackPanel();
             sp.Orientation = Orientation.Horizontal;
             sp.VerticalAlignment = VerticalAlignment.Center;
+
+            groupFilterDot = new Border();
+            groupFilterDot.Width = 7;
+            groupFilterDot.Height = 7;
+            groupFilterDot.CornerRadius = new CornerRadius(3.5);
+            groupFilterDot.Margin = new Thickness(0, 0, 5, 0);
+            groupFilterDot.VerticalAlignment = VerticalAlignment.Center;
+            sp.Children.Add(groupFilterDot);
+
+            groupFilterLabel = new TextBlock();
+            groupFilterLabel.FontSize = 11.5;
+            groupFilterLabel.Foreground = Theme.TextSecondary;
+            groupFilterLabel.VerticalAlignment = VerticalAlignment.Center;
+            sp.Children.Add(groupFilterLabel);
+
+            groupFilterCount = new TextBlock();
+            groupFilterCount.FontSize = 10.5;
+            groupFilterCount.Foreground = Theme.TextTertiary;
+            groupFilterCount.Margin = new Thickness(4, 0, 0, 0);
+            groupFilterCount.VerticalAlignment = VerticalAlignment.Center;
+            sp.Children.Add(groupFilterCount);
+
+            groupFilterChev = Theme.Glyph("\uE70D", 8, Theme.TextTertiary);
+            groupFilterChev.VerticalAlignment = VerticalAlignment.Center;
+            groupFilterChev.Margin = new Thickness(6, 1, 0, 0);
+            sp.Children.Add(groupFilterChev);
+
+            groupFilterChip.Child = sp;
+            g.Children.Add(groupFilterChip);
+            Grid.SetColumn(groupFilterChip, 0);
+
+            Border addBtn = Theme.GhostButton("\uE710", 10, "新建分组", false, delegate { NewGroupFlow(); });
+            addBtn.Width = 26;
+            addBtn.Height = 24;
+            addBtn.VerticalAlignment = VerticalAlignment.Center;
+            g.Children.Add(addBtn);
+            Grid.SetColumn(addBtn, 1);
+
+            return groupBar;
+        }
+
+        // Repaints the single filter chip. Counts follow the current search so the number
+        // always matches what the list below actually shows.
+        private void RefreshGroupBar(List<TodoItem> visible)
+        {
+            lastVisible = visible;
+            if (groupFilterChip == null) return;
+
+            bool on = groupFilter != GroupAll;
+            int n = on ? Store.CountInGroup(visible, groupFilter) : visible.Count;
+
+            groupFilterLabel.Text = on ? FilterName() : "全部分组";
+            groupFilterCount.Text = n.ToString();
+            groupFilterDot.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (on)
+            {
+                groupFilterDot.Background = groupFilter == GroupNone
+                    ? BrushFrom(0xB0, 0xB7, 0xC3)
+                    : GroupDot(GroupIndex(groupFilter));
+            }
+
+            groupFilterChip.Background = on ? Theme.Accent : Brushes.White;
+            groupFilterChip.BorderBrush = on ? Theme.Accent : Theme.ChipBorder;
+            groupFilterLabel.Foreground = on ? Brushes.White : Theme.TextSecondary;
+            groupFilterCount.Foreground = on ? BrushFrom(0xDC, 0xE3, 0xFF) : Theme.TextTertiary;
+            groupFilterChev.Foreground = on ? Brushes.White : Theme.TextTertiary;
+            groupFilterChip.ToolTip = on ? "当前只看「" + FilterName() + "」，点击切换" : "切换到某个分组";
+
+            if (addHint != null)
+            {
+                if (!on) addHint.Text = "回车快速添加";
+                else addHint.Text = "添加到 " + FilterName();
+            }
+        }
+
+        // The whole group list in a popup: 全部分组 / every group / 未分组, each with a count.
+        private void ToggleGroupFilterMenu()
+        {
+            if (groupFilterMenu != null)
+            {
+                groupFilterMenu.Close();
+                groupFilterMenu = null;
+                return;
+            }
+
+            List<TodoItem> visible = lastVisible == null ? new List<TodoItem>() : lastVisible;
+
+            Window w = new Window();
+            groupFilterMenu = w;
+            w.Title = "选择分组";
+            w.Width = 196;
+            w.SizeToContent = SizeToContent.Height;
+            w.WindowStyle = WindowStyle.None;
+            w.ResizeMode = ResizeMode.NoResize;
+            w.AllowsTransparency = true;
+            w.Background = Brushes.Transparent;
+            w.Topmost = true;
+            w.ShowInTaskbar = false;
+            w.WindowStartupLocation = WindowStartupLocation.Manual;
+
+            Border root = new Border();
+            root.Background = Brushes.White;
+            root.CornerRadius = new CornerRadius(12);
+            root.BorderBrush = Theme.CardBorder;
+            root.BorderThickness = new Thickness(1);
+            root.Margin = new Thickness(9);
+            root.Padding = new Thickness(4, 4, 4, 4);
+            root.Effect = Theme.CardShadow();
+            w.Content = root;
+
+            ScrollViewer sv = new ScrollViewer();
+            sv.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            sv.MaxHeight = 320;
+            Style sbStyle = Theme.SlimScrollBar();
+            if (sbStyle != null) sv.Resources.Add(typeof(ScrollBar), sbStyle);
+            root.Child = sv;
+
+            StackPanel sp = new StackPanel();
+            sv.Content = sp;
+
+            sp.Children.Add(BuildFilterRow(w, GroupAll, "全部分组", visible.Count, null));
+            foreach (TodoGroup g in Store.Groups())
+            {
+                sp.Children.Add(BuildFilterRow(w, g.Id, g.Name,
+                    Store.CountInGroup(visible, g.Id), GroupDot(GroupIndex(g.Id))));
+            }
+            sp.Children.Add(BuildFilterRow(w, GroupNone, "未分组",
+                Store.CountInGroup(visible, GroupNone), BrushFrom(0xB0, 0xB7, 0xC3)));
+
+            Border divider = new Border();
+            divider.Height = 1;
+            divider.Background = Theme.CardBorder;
+            divider.Margin = new Thickness(6, 4, 6, 4);
+            sp.Children.Add(divider);
+
+            Border newRow = new Border();
+            newRow.CornerRadius = new CornerRadius(8);
+            newRow.Padding = new Thickness(8, 6, 8, 6);
+            newRow.Cursor = Cursors.Hand;
+            StackPanel nsp = new StackPanel();
+            nsp.Orientation = Orientation.Horizontal;
+            TextBlock plus = Theme.Glyph("\uE710", 9, Theme.Accent);
+            plus.VerticalAlignment = VerticalAlignment.Center;
+            TextBlock ntxt = new TextBlock();
+            ntxt.Text = "新建分组…";
+            ntxt.FontSize = 12;
+            ntxt.Foreground = Theme.Accent;
+            ntxt.VerticalAlignment = VerticalAlignment.Center;
+            ntxt.Margin = new Thickness(6, 0, 0, 0);
+            nsp.Children.Add(plus);
+            nsp.Children.Add(ntxt);
+            newRow.Child = nsp;
+            newRow.MouseEnter += delegate { newRow.Background = BrushFrom(0xF3, 0xF5, 0xFC); };
+            newRow.MouseLeave += delegate { newRow.Background = Brushes.Transparent; };
+            newRow.MouseLeftButtonUp += delegate
+            {
+                w.Close();
+                NewGroupFlow();
+            };
+            sp.Children.Add(newRow);
+
+            Point scr = groupFilterChip.PointToScreen(new Point(0, groupFilterChip.ActualHeight));
+            Point dip = scr;
+            PresentationSource ps = PresentationSource.FromVisual(this);
+            if (ps != null && ps.CompositionTarget != null)
+                dip = ps.CompositionTarget.TransformFromDevice.Transform(scr);
+            Rect wa = SystemParameters.WorkArea;
+            double left = dip.X - 9;
+            if (left + 196 > wa.Right - 6) left = wa.Right - 6 - 196;
+            if (left < wa.Left + 6) left = wa.Left + 6;
+            w.Left = left;
+            w.Top = dip.Y - 6;
+
+            w.Loaded += delegate
+            {
+                if (w.Top + w.ActualHeight > wa.Bottom - 6)
+                    w.Top = Math.Max(wa.Top + 6, dip.Y - 6 - w.ActualHeight);
+            };
+            w.Closed += delegate { if (groupFilterMenu == w) groupFilterMenu = null; };
+            w.Deactivated += delegate { w.Close(); };
+            w.Show();
+        }
+
+        private Border BuildFilterRow(Window w, string key, string label, int count, Brush dot)
+        {
+            bool current = groupFilter == key;
+
+            Border row = new Border();
+            row.CornerRadius = new CornerRadius(8);
+            row.Padding = new Thickness(7, 6, 7, 6);
+            row.Cursor = Cursors.Hand;
+            row.Background = Brushes.Transparent;
+
+            Grid g = new Grid();
+            ColumnDefinition c0 = new ColumnDefinition(); c0.Width = GridLength.Auto;
+            ColumnDefinition c1 = new ColumnDefinition(); c1.Width = new GridLength(1, GridUnitType.Star);
+            ColumnDefinition c2 = new ColumnDefinition(); c2.Width = GridLength.Auto;
+            ColumnDefinition c3 = new ColumnDefinition(); c3.Width = GridLength.Auto;
+            g.ColumnDefinitions.Add(c0);
+            g.ColumnDefinitions.Add(c1);
+            g.ColumnDefinitions.Add(c2);
+            g.ColumnDefinitions.Add(c3);
+            row.Child = g;
 
             if (dot != null)
             {
@@ -101,100 +277,64 @@ namespace DesktopTodo
                 d.Width = 7;
                 d.Height = 7;
                 d.CornerRadius = new CornerRadius(3.5);
-                d.Background = on ? Brushes.White : dot;
+                d.Background = dot;
                 d.VerticalAlignment = VerticalAlignment.Center;
-                d.Margin = new Thickness(0, 0, 5, 0);
-                sp.Children.Add(d);
+                d.Margin = new Thickness(1, 0, 7, 0);
+                g.Children.Add(d);
+                Grid.SetColumn(d, 0);
             }
 
-            TextBlock txt = new TextBlock();
-            txt.Text = label;
-            txt.FontSize = 11.5;
-            txt.Foreground = on ? Brushes.White : Theme.TextSecondary;
-            txt.VerticalAlignment = VerticalAlignment.Center;
-            sp.Children.Add(txt);
+            TextBlock t = new TextBlock();
+            t.Text = label;
+            t.FontSize = 12;
+            t.Foreground = current ? Theme.Accent : Theme.TextPrimary;
+            t.FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal;
+            t.VerticalAlignment = VerticalAlignment.Center;
+            t.TextTrimming = TextTrimming.CharacterEllipsis;
+            t.Margin = new Thickness(dot == null ? 1 : 0, 0, 6, 0);
+            g.Children.Add(t);
+            Grid.SetColumn(t, 1);
 
             TextBlock num = new TextBlock();
             num.Text = count.ToString();
             num.FontSize = 10.5;
-            num.Foreground = on ? BrushFrom(0xDC, 0xE3, 0xFF) : Theme.TextTertiary;
+            num.Foreground = Theme.TextTertiary;
             num.VerticalAlignment = VerticalAlignment.Center;
-            num.Margin = new Thickness(4, 0, 0, 0);
-            sp.Children.Add(num);
+            g.Children.Add(num);
+            Grid.SetColumn(num, 2);
 
-            chip.Child = sp;
+            if (current)
+            {
+                TextBlock ck = Theme.Glyph("\uE73E", 10, Theme.Accent);
+                ck.VerticalAlignment = VerticalAlignment.Center;
+                ck.Margin = new Thickness(6, 0, 0, 0);
+                g.Children.Add(ck);
+                Grid.SetColumn(ck, 3);
+            }
 
-            chip.MouseEnter += delegate
+            row.MouseEnter += delegate { row.Background = BrushFrom(0xF3, 0xF5, 0xFC); };
+            row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
+            row.MouseLeftButtonUp += delegate
             {
-                if (groupFilter != key) chip.Background = Theme.HoverFill;
-            };
-            chip.MouseLeave += delegate
-            {
-                chip.Background = groupFilter == key ? Theme.Accent : Brushes.White;
-            };
-            chip.MouseLeftButtonUp += delegate
-            {
+                w.Close();
+                if (current) return;
                 groupFilter = key;
                 RefreshAll();
             };
 
-            return chip;
+            return row;
         }
 
-        private Border BuildNewGroupChip()
+        private void NewGroupFlow()
         {
-            Border chip = new Border();
-            chip.Height = 23;
-            chip.CornerRadius = new CornerRadius(11.5);
-            chip.Padding = new Thickness(8, 0, 8, 0);
-            chip.Margin = new Thickness(0, 2, 5, 2);
-            chip.Cursor = Cursors.Hand;
-            chip.VerticalAlignment = VerticalAlignment.Center;
-            chip.Background = Brushes.Transparent;
-            chip.BorderThickness = new Thickness(1);
-            chip.BorderBrush = Theme.ChipBorder;
-            chip.ToolTip = "新建一个分组";
-
-            StackPanel sp = new StackPanel();
-            sp.Orientation = Orientation.Horizontal;
-            sp.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock plus = Theme.Glyph("\uE710", 9, Theme.TextTertiary);
-            plus.VerticalAlignment = VerticalAlignment.Center;
-            TextBlock txt = new TextBlock();
-            txt.Text = "分组";
-            txt.FontSize = 11.5;
-            txt.Foreground = Theme.TextTertiary;
-            txt.VerticalAlignment = VerticalAlignment.Center;
-            txt.Margin = new Thickness(4, 0, 0, 0);
-            sp.Children.Add(plus);
-            sp.Children.Add(txt);
-            chip.Child = sp;
-
-            chip.MouseEnter += delegate
+            ShowGroupDialog("新建分组", "", "创建", delegate(string name)
             {
-                chip.Background = Theme.HoverFill;
-                plus.Foreground = Theme.Accent;
-                txt.Foreground = Theme.Accent;
-            };
-            chip.MouseLeave += delegate
-            {
-                chip.Background = Brushes.Transparent;
-                plus.Foreground = Theme.TextTertiary;
-                txt.Foreground = Theme.TextTertiary;
-            };
-            chip.MouseLeftButtonUp += delegate
-            {
-                ShowGroupDialog("新建分组", "", "创建", delegate(string name)
-                {
-                    TodoGroup g = Store.AddGroup(name);
-                    if (g == null) return;
-                    groupFilter = g.Id;
-                    Store.Save();
-                    RefreshAll();
-                });
-            };
-
-            return chip;
+                TodoGroup g = Store.AddGroup(name);
+                if (g == null) return;
+                groupFilter = g.Id;
+                Store.Save();
+                RefreshAll();
+            });
         }
 
         // ---------- list sections ----------
