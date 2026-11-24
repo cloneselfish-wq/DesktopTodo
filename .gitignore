@@ -11,3 +11,6 @@ obj/
 
 # Logs
 *.log
+
+# Local agent workspace data (memory, scratch)
+.workbuddy/

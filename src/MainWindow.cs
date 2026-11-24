@@ -103,11 +103,13 @@ namespace DesktopTodo
             RowDefinition r0 = new RowDefinition(); r0.Height = new GridLength(44);
             RowDefinition r1 = new RowDefinition(); r1.Height = GridLength.Auto;
             RowDefinition r2 = new RowDefinition(); r2.Height = GridLength.Auto;
+            RowDefinition r2b = new RowDefinition(); r2b.Height = GridLength.Auto;
             RowDefinition r3 = new RowDefinition(); r3.Height = new GridLength(1, GridUnitType.Star);
             RowDefinition r4 = new RowDefinition(); r4.Height = GridLength.Auto;
             root.RowDefinitions.Add(r0);
             root.RowDefinitions.Add(r1);
             root.RowDefinitions.Add(r2);
+            root.RowDefinitions.Add(r2b);
             root.RowDefinitions.Add(r3);
             root.RowDefinitions.Add(r4);
             Content = root;
@@ -124,6 +126,10 @@ namespace DesktopTodo
             Grid.SetRow(sb, 2);
             root.Children.Add(sb);
 
+            Border gb = BuildGroupBar();
+            Grid.SetRow(gb, 3);
+            root.Children.Add(gb);
+
             activeScroller = new ScrollViewer();
             activeScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             Style sbStyle = Theme.SlimScrollBar();
@@ -131,11 +137,11 @@ namespace DesktopTodo
             activeScroller.Margin = new Thickness(10, 8, 4, 0);
             activeList = new StackPanel();
             activeScroller.Content = activeList;
-            Grid.SetRow(activeScroller, 3);
+            Grid.SetRow(activeScroller, 4);
             root.Children.Add(activeScroller);
 
             Border ds = BuildDoneSection();
-            Grid.SetRow(ds, 4);
+            Grid.SetRow(ds, 5);
             root.Children.Add(ds);
         }
 
@@ -352,14 +358,14 @@ namespace DesktopTodo
             chips.Children.Add(dueCell);
             Grid.SetColumn(dueCell, 0);
 
-            TextBlock hint = new TextBlock();
-            hint.Text = "回车快速添加";
-            hint.FontSize = 11;
-            hint.Foreground = Theme.TextTertiary;
-            hint.VerticalAlignment = VerticalAlignment.Center;
-            hint.HorizontalAlignment = HorizontalAlignment.Right;
-            chips.Children.Add(hint);
-            Grid.SetColumn(hint, 2);
+            addHint = new TextBlock();
+            addHint.Text = "回车快速添加";
+            addHint.FontSize = 11;
+            addHint.Foreground = Theme.TextTertiary;
+            addHint.VerticalAlignment = VerticalAlignment.Center;
+            addHint.HorizontalAlignment = HorizontalAlignment.Right;
+            chips.Children.Add(addHint);
+            Grid.SetColumn(addHint, 2);
 
             g.Children.Add(chips);
             Grid.SetRow(chips, 1);

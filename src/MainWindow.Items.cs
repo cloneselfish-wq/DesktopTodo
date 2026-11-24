@@ -94,9 +94,12 @@ namespace DesktopTodo
             bool filtering = q.Length > 0;
 
             List<TodoItem> activeAll = Store.GetActiveSorted();
-            List<TodoItem> active = filtering
+            List<TodoItem> searched = filtering
                 ? activeAll.FindAll(delegate(TodoItem i) { return ItemMatches(i, q); })
                 : activeAll;
+            List<TodoItem> active = searched.FindAll(GroupFilterMatch);
+
+            RefreshGroupBar(searched);
 
             if (titleCount != null)
             {
@@ -153,12 +156,22 @@ namespace DesktopTodo
                     emptyStateTitle.Text = "没有匹配的待办";
                     emptyStateSub.Text = "换个关键词试试，或点右上角 ✕ 清除搜索";
                 }
+                else if (groupFilter != GroupAll)
+                {
+                    emptyStateTitle.Text = "「" + FilterName() + "」里没有待办";
+                    emptyStateSub.Text = "在上方输入，回车就会添加到这个分组";
+                }
                 else
                 {
                     emptyStateTitle.Text = "今天没有待办";
                     emptyStateSub.Text = "在上方输入，回车添加一条吧";
                 }
                 activeList.Children.Add(emptyState);
+            }
+            else if (groupFilter == GroupAll)
+            {
+                // No group filter: one collapsible section per group, 未分组 last.
+                RenderActiveGrouped(active);
             }
             else
             {
@@ -214,6 +227,8 @@ namespace DesktopTodo
             it.DueDate = duePicker.SelectedDate.HasValue
                 ? duePicker.SelectedDate.Value.Date
                 : (DateTime?)null;
+            // New items land in the group currently being viewed (未分组/全部 -> no group).
+            it.GroupId = (groupFilter == GroupAll || groupFilter == GroupNone) ? null : groupFilter;
 
             Store.Data.Items.Add(it);
             Store.Save();
@@ -501,6 +516,9 @@ namespace DesktopTodo
             actions.Orientation = Orientation.Horizontal;
             actions.VerticalAlignment = VerticalAlignment.Center;
             actions.Opacity = 0;
+            Border move = BuildGroupButton(item);
+            move.Margin = new Thickness(0, 0, 2, 0);
+            actions.Children.Add(move);
             actions.Children.Add(BuildEditButton(item));
             Border del = BuildDeleteButton(item);
             del.Margin = new Thickness(2, 0, 0, 0);

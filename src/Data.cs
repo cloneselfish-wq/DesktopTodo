@@ -12,6 +12,12 @@ namespace DesktopTodo
         public bool Done { get; set; }
     }
 
+    public class TodoGroup
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+    }
+
     public class TodoItem
     {
         public string Id { get; set; }
@@ -21,6 +27,10 @@ namespace DesktopTodo
         public bool Completed { get; set; }
         public DateTime? CompletedAt { get; set; }
         public List<SubTask> Subs { get; set; }
+
+        // Group this item belongs to. Older data files have no GroupId at all,
+        // and null/empty both mean "未分组".
+        public string GroupId { get; set; }
 
         // Older data files have no Subs field at all, so reads must never assume non-null.
         public List<SubTask> SubsList()
@@ -68,6 +78,7 @@ namespace DesktopTodo
     public class AppDataFile
     {
         public List<TodoItem> Items { get; set; }
+        public List<TodoGroup> Groups { get; set; }
         public Settings Settings { get; set; }
     }
 
@@ -85,6 +96,7 @@ namespace DesktopTodo
         {
             Data = new AppDataFile();
             Data.Items = new List<TodoItem>();
+            Data.Groups = new List<TodoGroup>();
             Settings s = new Settings();
             s.Topmost = true;
             Data.Settings = s;
@@ -93,7 +105,13 @@ namespace DesktopTodo
             {
                 if (File.Exists(FilePath))
                 {
-                    AppDataFile loaded = Json.Deserialize<AppDataFile>(File.ReadAllText(FilePath));
+                    string raw = File.ReadAllText(FilePath);
+                    // JavaScriptSerializer only recognises the escaped form \/Date(ms)\/ inside
+                    // string values; a file rewritten by an external tool may carry plain
+                    // /Date(ms)/, which makes Deserialize throw and the whole list read as empty.
+                    // Normalising is value-preserving ("\/" decodes back to "/"), so it is safe.
+                    raw = System.Text.RegularExpressions.Regex.Replace(raw, @"(?<!\\)/Date\(", @"\\/Date(");
+                    AppDataFile loaded = Json.Deserialize<AppDataFile>(raw);
                     if (loaded != null)
                     {
                         if (loaded.Items != null)
@@ -109,6 +127,7 @@ namespace DesktopTodo
                             }
                             Data.Items = clean;
                         }
+                        LoadGroups(loaded.Groups);
                         if (loaded.Settings != null) Data.Settings = loaded.Settings;
                     }
                 }
@@ -116,7 +135,61 @@ namespace DesktopTodo
             catch (Exception ex)
             {
                 Logger.Log("Store.Load failed: " + ex.Message);
+                BackupBrokenFile();
             }
+        }
+
+        // A parse failure must never end with the user's list silently replaced by an
+        // empty one on the next save: keep a copy of whatever we could not read.
+        private static void BackupBrokenFile()
+        {
+            try
+            {
+                if (!File.Exists(FilePath)) return;
+                string dst = Path.Combine(Dir, "todos.broken-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                File.Copy(FilePath, dst, true);
+                Logger.Log("Store.Load: unreadable data copied to " + dst);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("BackupBrokenFile failed: " + ex.Message);
+            }
+        }
+
+        // Keeps only well-formed groups (non-empty name, unique id), and drops any item
+        // reference to a group that no longer exists so the UI can trust GroupId.
+        private static void LoadGroups(List<TodoGroup> raw)
+        {
+            List<TodoGroup> clean = new List<TodoGroup>();
+            if (raw != null)
+            {
+                foreach (TodoGroup g in raw)
+                {
+                    if (g == null || string.IsNullOrEmpty(g.Name)) continue;
+                    g.Name = g.Name.Trim();
+                    if (g.Name.Length == 0) continue;
+                    if (string.IsNullOrEmpty(g.Id)) g.Id = Guid.NewGuid().ToString("N");
+                    if (FindGroup(clean, g.Id) != null) continue;
+                    clean.Add(g);
+                }
+            }
+            Data.Groups = clean;
+
+            foreach (TodoItem it in Data.Items)
+            {
+                if (!string.IsNullOrEmpty(it.GroupId) && FindGroup(clean, it.GroupId) == null)
+                    it.GroupId = null;
+            }
+        }
+
+        private static TodoGroup FindGroup(List<TodoGroup> list, string id)
+        {
+            if (list == null || id == null) return null;
+            foreach (TodoGroup g in list)
+            {
+                if (g != null && g.Id == id) return g;
+            }
+            return null;
         }
 
         public static void Save()
@@ -139,6 +212,12 @@ namespace DesktopTodo
             List<TodoItem> list = Data.Items.FindAll(delegate(TodoItem i) { return !i.Completed; });
             list.Sort(CompareActive);
             return list;
+        }
+
+        // Same ordering as GetActiveSorted, exposed for per-group sublists.
+        public static void SortActive(List<TodoItem> list)
+        {
+            list.Sort(CompareActive);
         }
 
         private static int CompareActive(TodoItem a, TodoItem b)
@@ -176,6 +255,94 @@ namespace DesktopTodo
             if (it == null) return false;
             Data.Items.Remove(it);
             return true;
+        }
+
+        // ---------- groups ----------
+
+        // Never null; older data files simply start with an empty group list.
+        public static List<TodoGroup> Groups()
+        {
+            if (Data.Groups == null) Data.Groups = new List<TodoGroup>();
+            return Data.Groups;
+        }
+
+        public static TodoGroup GetGroup(string id)
+        {
+            return FindGroup(Groups(), id);
+        }
+
+        // Display name for an item's group; ungrouped items read as "未分组".
+        public static string GroupName(string id)
+        {
+            TodoGroup g = GetGroup(id);
+            return g == null ? "未分组" : g.Name;
+        }
+
+        // Returns the existing group when the name is already taken (ignoring case),
+        // so typing the same name twice never creates duplicates.
+        public static TodoGroup AddGroup(string name)
+        {
+            if (name == null) return null;
+            string t = name.Trim();
+            if (t.Length == 0) return null;
+            foreach (TodoGroup g in Groups())
+            {
+                if (string.Equals(g.Name, t, StringComparison.CurrentCultureIgnoreCase)) return g;
+            }
+            TodoGroup ng = new TodoGroup();
+            ng.Id = Guid.NewGuid().ToString("N");
+            ng.Name = t;
+            Groups().Add(ng);
+            return ng;
+        }
+
+        public static bool RenameGroup(string id, string name)
+        {
+            TodoGroup g = GetGroup(id);
+            if (g == null || name == null) return false;
+            string t = name.Trim();
+            if (t.Length == 0) return false;
+            foreach (TodoGroup other in Groups())
+            {
+                if (other != g && string.Equals(other.Name, t, StringComparison.CurrentCultureIgnoreCase))
+                    return false;
+            }
+            g.Name = t;
+            return true;
+        }
+
+        // Removing a group never removes todos: its items fall back to 未分组.
+        public static void DeleteGroup(string id)
+        {
+            TodoGroup g = GetGroup(id);
+            if (g == null) return;
+            foreach (TodoItem it in Data.Items)
+            {
+                if (it.GroupId == id) it.GroupId = null;
+            }
+            Groups().Remove(g);
+        }
+
+        public static void MoveItem(string itemId, string groupId)
+        {
+            TodoItem it = Data.Items.Find(delegate(TodoItem i) { return i.Id == itemId; });
+            if (it == null) return;
+            it.GroupId = string.IsNullOrEmpty(groupId) ? null : groupId;
+        }
+
+        // groupId == null / "" counts the ungrouped bucket.
+        public static bool InGroup(TodoItem it, string groupId)
+        {
+            string gid = string.IsNullOrEmpty(it.GroupId) ? null : it.GroupId;
+            string want = string.IsNullOrEmpty(groupId) ? null : groupId;
+            return gid == want;
+        }
+
+        public static int CountInGroup(List<TodoItem> items, string groupId)
+        {
+            int n = 0;
+            foreach (TodoItem it in items) if (InGroup(it, groupId)) n++;
+            return n;
         }
     }
 
