@@ -316,6 +316,12 @@ namespace DesktopTodo
             card.BorderThickness = new Thickness(1);
             card.Tag = item;
 
+            // Animatable pieces of the subtask rows, filled in below and handed to
+            // AnimateComplete so the small items get struck in step with the title.
+            List<SubVisual> subVisuals = new List<SubVisual>();
+            Border subChip = null;
+            TextBlock subChipText = null;
+
             Grid g = new Grid();
             ColumnDefinition c0 = new ColumnDefinition(); c0.Width = GridLength.Auto;
             ColumnDefinition c1 = new ColumnDefinition(); c1.Width = new GridLength(1, GridUnitType.Star);
@@ -416,7 +422,7 @@ namespace DesktopTodo
                 int doneCount = item.SubDoneCount();
                 bool expanded = !subCollapsed.Contains(item.Id);
 
-                Border subChip = new Border();
+                subChip = new Border();
                 subChip.Background = Theme.ChipBg;
                 subChip.CornerRadius = new CornerRadius(9);
                 subChip.Padding = new Thickness(7, 2, 6, 3);
@@ -439,17 +445,17 @@ namespace DesktopTodo
                 chipSp.Orientation = Orientation.Horizontal;
                 TextBlock subIco = Theme.Glyph("\uE73A", 10, subBrush);
                 subIco.VerticalAlignment = VerticalAlignment.Center;
-                TextBlock subTxt = new TextBlock();
-                subTxt.Text = "子事项 " + doneCount + "/" + subs.Count;
-                subTxt.FontSize = 11;
-                subTxt.Foreground = subBrush;
-                subTxt.VerticalAlignment = VerticalAlignment.Center;
-                subTxt.Margin = new Thickness(4, 0, 0, 0);
+                subChipText = new TextBlock();
+                subChipText.Text = "子事项 " + doneCount + "/" + subs.Count;
+                subChipText.FontSize = 11;
+                subChipText.Foreground = subBrush;
+                subChipText.VerticalAlignment = VerticalAlignment.Center;
+                subChipText.Margin = new Thickness(4, 0, 0, 0);
                 TextBlock subChev = Theme.Glyph(expanded ? "\uE70D" : "\uE70E", 9, subBrush);
                 subChev.VerticalAlignment = VerticalAlignment.Center;
                 subChev.Margin = new Thickness(4, -1, 0, 0);
                 chipSp.Children.Add(subIco);
-                chipSp.Children.Add(subTxt);
+                chipSp.Children.Add(subChipText);
                 chipSp.Children.Add(subChev);
                 subChip.Child = chipSp;
                 content.Children.Add(subChip);
@@ -476,29 +482,51 @@ namespace DesktopTodo
                         {
                             e.Handled = true;
                             sub.Done = !sub.Done;
+                            item.AutoDoneSubs = false;  // a manual tick wins over the auto-tick
                             Store.Save();
                             RefreshAll();
                         };
                         srow.Children.Add(scb);
                         Grid.SetColumn(scb, 0);
 
+                        // Text plus its own strike line: same primitive as the title, so
+                        // completing the whole item can draw every line in one beat.
+                        Grid stGrid = new Grid();
+                        stGrid.Background = Brushes.Transparent;
+                        stGrid.HorizontalAlignment = HorizontalAlignment.Left;
+                        stGrid.VerticalAlignment = VerticalAlignment.Center;
+                        stGrid.Margin = new Thickness(7, 0, 4, 0);
+
                         TextBlock stxt = new TextBlock();
                         stxt.Text = sub.Text;
                         stxt.TextWrapping = TextWrapping.Wrap;
                         stxt.FontSize = 12.5;
                         stxt.VerticalAlignment = VerticalAlignment.Center;
-                        stxt.Margin = new Thickness(7, 0, 4, 0);
-                        if (sub.Done)
-                        {
-                            stxt.Foreground = Theme.TextTertiary;
-                            stxt.TextDecorations = TextDecorations.Strikethrough;
-                        }
-                        else
-                        {
-                            stxt.Foreground = Theme.TextSecondary;
-                        }
-                        srow.Children.Add(stxt);
-                        Grid.SetColumn(stxt, 1);
+                        stxt.Foreground = sub.Done ? Theme.TextTertiary : Theme.TextSecondary;
+                        stGrid.Children.Add(stxt);
+
+                        Rectangle sStrike = new Rectangle();
+                        sStrike.Height = 1.5;
+                        sStrike.RadiusX = 0.75;
+                        sStrike.RadiusY = 0.75;
+                        sStrike.Fill = BrushFrom(0xA6, 0xAD, 0xB9);
+                        sStrike.VerticalAlignment = VerticalAlignment.Center;
+                        ScaleTransform sSt = new ScaleTransform(sub.Done ? 1 : 0, 1);
+                        sStrike.RenderTransform = sSt;
+                        sStrike.RenderTransformOrigin = new Point(0, 0.5);
+                        stGrid.Children.Add(sStrike);
+
+                        srow.Children.Add(stGrid);
+                        Grid.SetColumn(stGrid, 1);
+
+                        SubVisual sv = new SubVisual();
+                        sv.Sub = sub;
+                        sv.Box = scb;
+                        sv.Check = (TextBlock)scb.Child;
+                        sv.Text = stxt;
+                        sv.Strike = sSt;
+                        sv.WasDone = sub.Done;
+                        subVisuals.Add(sv);
 
                         subList.Children.Add(srow);
                     }
@@ -509,7 +537,7 @@ namespace DesktopTodo
             cb.MouseLeftButtonUp += delegate
             {
                 if (item.Completed) return;
-                AnimateComplete(item, card, cb, check, txt, strike, st);
+                AnimateComplete(item, card, cb, check, txt, strike, st, subVisuals, subChip, subChipText);
             };
 
             StackPanel actions = new StackPanel();
@@ -544,11 +572,25 @@ namespace DesktopTodo
 
         // Check -> draw the line through the text -> fade & collapse the card -> re-render lists.
         // Data is persisted immediately, so nothing is lost even if the app closes mid-animation.
+        // Completing a parent completes everything inside it, and the subtask lines are drawn
+        // in the same beat as the title so the whole card strikes through at once.
         private void AnimateComplete(TodoItem item, Border card, Border cb, TextBlock check,
-            TextBlock txt, Rectangle strike, ScaleTransform st)
+            TextBlock txt, Rectangle strike, ScaleTransform st,
+            List<SubVisual> subVisuals, Border subChip, TextBlock subChipText)
         {
             item.Completed = true;
             item.CompletedAt = DateTime.Now;
+            bool autoTicked = false;
+            if (item.Subs != null)
+            {
+                foreach (SubTask s in item.Subs)
+                {
+                    if (s == null) continue;
+                    if (!s.Done) autoTicked = true;
+                    s.Done = true;
+                }
+            }
+            if (autoTicked) item.AutoDoneSubs = true;
             Store.Save();
 
             card.IsHitTestVisible = false;
@@ -561,6 +603,51 @@ namespace DesktopTodo
 
             DoubleAnimation txtFade = new DoubleAnimation(1, 0.5, TimeSpan.FromMilliseconds(480));
             txt.BeginAnimation(OpacityProperty, txtFade);
+
+            // Progress chip flips to "n/n" right away, otherwise it would read 0/5 while
+            // every line underneath is already struck.
+            if (subChipText != null)
+            {
+                int total = 0;
+                if (item.Subs != null) foreach (SubTask s in item.Subs) if (s != null) total++;
+                subChipText.Text = "子事项 " + total + "/" + total;
+            }
+            if (subChip != null)
+            {
+                StackPanel chipSp = subChip.Child as StackPanel;
+                if (chipSp != null)
+                {
+                    // The chip is icon + label + chevron, all TextBlocks.
+                    foreach (UIElement el in chipSp.Children)
+                    {
+                        TextBlock t = el as TextBlock;
+                        if (t != null) t.Foreground = Theme.Accent;
+                    }
+                }
+            }
+
+            // Subtasks tick and strike together with the title: same duration, same easing,
+            // started in the same frame.
+            if (subVisuals != null)
+            {
+                foreach (SubVisual v in subVisuals)
+                {
+                    if (v.WasDone) continue;
+                    v.Box.Background = Theme.Accent;
+                    v.Box.BorderBrush = Theme.Accent;
+                    v.Check.Visibility = Visibility.Visible;
+
+                    DoubleAnimation subCheckIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160));
+                    v.Check.BeginAnimation(OpacityProperty, subCheckIn);
+
+                    DoubleAnimation subFade = new DoubleAnimation(1, 0.6, TimeSpan.FromMilliseconds(480));
+                    v.Text.BeginAnimation(OpacityProperty, subFade);
+
+                    DoubleAnimation subLine = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(480));
+                    subLine.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                    v.Strike.BeginAnimation(ScaleTransform.ScaleXProperty, subLine);
+                }
+            }
 
             DoubleAnimation grow = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(480));
             grow.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
@@ -587,6 +674,16 @@ namespace DesktopTodo
         {
             item.Completed = false;
             item.CompletedAt = null;
+            // Subtasks that were only ticked because the parent got checked go back too;
+            // anything the user ticked by hand stays ticked.
+            if (item.AutoDoneSubs)
+            {
+                if (item.Subs != null)
+                {
+                    foreach (SubTask s in item.Subs) if (s != null) s.Done = false;
+                }
+                item.AutoDoneSubs = false;
+            }
             Store.Save();
             RefreshAll();
         }
@@ -697,6 +794,18 @@ namespace DesktopTodo
             if (d.Date < today) return BrushFrom(0xE5, 0x48, 0x4D);
             if (d.Date == today) return BrushFrom(0xD9, 0x77, 0x06);
             return BrushFrom(0x6B, 0x72, 0x80);
+        }
+
+        // The animatable pieces of one expanded subtask row, captured at build time so
+        // AnimateComplete can tick and strike them without searching the visual tree.
+        private class SubVisual
+        {
+            public SubTask Sub;
+            public Border Box;
+            public TextBlock Check;
+            public TextBlock Text;
+            public ScaleTransform Strike;
+            public bool WasDone;
         }
     }
 }

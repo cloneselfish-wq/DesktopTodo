@@ -32,6 +32,10 @@ namespace DesktopTodo
         // and null/empty both mean "未分组".
         public string GroupId { get; set; }
 
+        // True when checking this item ticked its subtasks automatically. Restoring the
+        // item then unticks them again, so a mis-click never leaves a whole checklist done.
+        public bool AutoDoneSubs { get; set; }
+
         // Older data files have no Subs field at all, so reads must never assume non-null.
         public List<SubTask> SubsList()
         {

@@ -315,6 +315,7 @@ namespace DesktopTodo
                     {
                         e.Handled = true;
                         s.Done = !s.Done;
+                        item.AutoDoneSubs = false;  // a manual tick wins over the auto-tick
                         ((TextBlock)cbx.Child).Visibility = s.Done ? Visibility.Visible : Visibility.Collapsed;
                         cbx.Background = s.Done ? Theme.Accent : Brushes.White;
                         cbx.BorderBrush = s.Done ? Theme.Accent : Theme.CheckBorder;
